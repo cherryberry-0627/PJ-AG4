@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
 import os
 from pathlib import Path
+from typing import Sequence
 
 from dotenv import find_dotenv, load_dotenv
+
+# 默认内置JSON文档路径
+_DEFAULT_AGENTS_FILE = Path(__file__).resolve().parent / "data" / "agents.json"
 
 
 def _load_runtime_env() -> None:
@@ -90,6 +95,36 @@ class SimulationConfig:
     agents: tuple[AgentConfig, ...] = field(default_factory=tuple)
 
 
+
+
+def load_agent_configs(
+    profile: str = "default",
+    *,
+    source: str | Path | None = None,
+) -> tuple[AgentConfig, ...]:
+    """重构1：去除原有default_simulation_config里的agent config构造，
+    将agent配置独立为一个JSON文档进行加载
+    并新增读取JSON文件的API。
+    
+    暂时保持原有的函数式编程和annotations风格
+
+    参数:
+        profile: 要加载的agent配置集的名称，默认为"default"
+        source: JSON文件路径，None时使用默认内置JSON文档
+    """
+    path = Path(source) if source is not None else _DEFAULT_AGENTS_FILE
+    with path.open("r", encoding="utf-8") as fh:
+        data = json.load(fh)
+    profile_data = data.get("profiles", {}).get(profile)
+    if profile_data is None:
+        known = ", ".join(sorted(data.get("profiles", {})))
+        raise ValueError(
+            f"unknown agent profile {profile!r}; "
+            f"available profiles: {known or '(none)'}"
+        )
+    return tuple(AgentConfig(**entry) for entry in profile_data)
+
+
 def default_simulation_config(
     *,
     seed: int = 7,
@@ -99,82 +134,11 @@ def default_simulation_config(
     llm_base_url: str | None = None,
     llm_api_key: str | None = None,
     llm_model: str | None = None,
+    agents_profile: str = "default",
+    agents_file: str | Path | None = None,
 ) -> SimulationConfig:
     _load_runtime_env()
-    agents = (
-        AgentConfig(
-            name="Hyperscaler",
-            role="hyperscaler",
-            persona="Scale-dominant operator that values throughput, market share, and capacity continuity.",
-            forecaster_style="momentum_chaser",
-            pricer_style="share_grabber",
-            allocator_style="capacity_expander",
-            risk_style="growth_tolerant",
-            base_price=4.6,
-            price_floor=4.0,
-            price_ceiling=6.0,
-            price_step=0.2,
-            quantity_step=10,
-            max_quantity=120,
-            inventory_start=30.0,
-            reputation_start=0.65,
-            brand_strength=0.05,
-            linear_cost=3.0,
-            quadratic_cost=0.015,
-            holding_cost_rate=0.10,
-            obsolescence_penalty=0.25,
-            sla_penalty=1.20,
-            menu_cost_rate=0.02,
-        ),
-        AgentConfig(
-            name="PremiumCloud",
-            role="premium",
-            persona="SLA-first premium operator that protects brand, uptime, and disciplined monetization.",
-            forecaster_style="signal_smoother",
-            pricer_style="premium_keeper",
-            allocator_style="buffered_allocator",
-            risk_style="sla_guard",
-            base_price=5.4,
-            price_floor=4.4,
-            price_ceiling=7.0,
-            price_step=0.2,
-            quantity_step=10,
-            max_quantity=100,
-            inventory_start=20.0,
-            reputation_start=0.80,
-            brand_strength=0.30,
-            linear_cost=3.4,
-            quadratic_cost=0.010,
-            holding_cost_rate=0.08,
-            obsolescence_penalty=0.20,
-            sla_penalty=1.50,
-            menu_cost_rate=0.02,
-        ),
-        AgentConfig(
-            name="SpotBroker",
-            role="spot",
-            persona="Fast-moving spot broker that hunts volatility and preserves light, flexible inventory.",
-            forecaster_style="volatility_reader",
-            pricer_style="spread_hunter",
-            allocator_style="inventory_light",
-            risk_style="inventory_guard",
-            base_price=4.9,
-            price_floor=3.8,
-            price_ceiling=6.4,
-            price_step=0.2,
-            quantity_step=10,
-            max_quantity=80,
-            inventory_start=15.0,
-            reputation_start=0.55,
-            brand_strength=0.10,
-            linear_cost=3.6,
-            quadratic_cost=0.008,
-            holding_cost_rate=0.12,
-            obsolescence_penalty=0.22,
-            sla_penalty=1.30,
-            menu_cost_rate=0.03,
-        ),
-    )
+    agents = load_agent_configs(agents_profile, source=agents_file)
     resolved_llm_api_key = llm_api_key or os.getenv("PJ_AG4_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
     llm_config = LLMConfig(
         base_url=llm_base_url or os.getenv("PJ_AG4_OPENAI_BASE_URL") or "http://127.0.0.1:8045/v1",
