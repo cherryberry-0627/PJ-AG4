@@ -28,6 +28,7 @@ AI-facing control documents are grouped under:
 Current execution roadmap:
 
 - [plan.md](plan.md)
+- [DESIGN.md](DESIGN.md)
 
 ## Repository Layout
 
@@ -48,6 +49,7 @@ lessons.md               Anti-regression notes
 
 - `simulation_results.csv`
 - `strategy_analysis.pdf`
+- `strategy_dashboard.html`
 
 ## Run
 
@@ -115,6 +117,62 @@ Artifacts:
 
 - `outputs/default_run/simulation_results.csv`
 - `outputs/default_run/strategy_analysis.pdf`
+- `outputs/default_run/strategy_dashboard.html`
+
+The HTML dashboard is the local sandbox surface for:
+
+- agent decision inspection
+- market trend monitoring
+- shock and anomaly review
+- future controls for interventions and quant overlays
+
+## Direct Layout Editing
+
+If you want to tweak the dashboard layout directly, edit the root template file:
+
+- [dashboard_template.html](/Users/yijunrong/Desktop/PJ-AG4/dashboard_template.html)
+
+The generator now prefers this file over the built-in template in Python. After editing it, regenerate the dashboard:
+
+```bash
+python3 -m pj_ag4.cli --rounds 30 --output-dir outputs/dev_dashboard
+```
+
+Then open:
+
+- `outputs/dev_dashboard/strategy_dashboard.html`
+
+If you prefer a localhost web surface instead of opening the exported file directly, use the service startup steps below.
+
+## Start The Local Dashboard Service
+
+Recommended startup flow:
+
+```bash
+cd /Users/yijunrong/Desktop/PJ-AG4
+python3 -m pj_ag4.web --host 127.0.0.1 --port 8766
+```
+
+If you installed the project entrypoints, the equivalent command is:
+
+```bash
+pj-ag4-web --host 127.0.0.1 --port 8766
+```
+
+For the LLM-backed runtime, make sure the local gateway is available at `http://127.0.0.1:8045/v1`. The localhost dashboard service will use:
+
+- base URL: `http://127.0.0.1:8045/v1`
+- model: `gemini-3-flash`
+- API key: `local-dev-key`
+
+After the service starts, open:
+
+- `http://127.0.0.1:8766/` for the streaming dashboard UI
+- `http://127.0.0.1:8766/?agent_mode=llm` to boot directly into LLM mode
+- `http://127.0.0.1:8766/api/payload` for a one-shot JSON payload
+- `http://127.0.0.1:8766/api/stream` for the event stream API
+
+The service keeps running in the foreground. Stop it with `Ctrl+C`.
 
 ## Quant Toolkit
 
@@ -130,4 +188,4 @@ pytest
 
 ## Status
 
-The repository currently has a runnable simulation core, switchable heuristic and LLM agent modes, CSV export, chart generation, quant tooling, and passing tests.
+The repository currently has a runnable simulation core, switchable heuristic and LLM agent modes, CSV export, PDF chart generation, an interactive HTML dashboard artifact, quant tooling, and passing tests.
