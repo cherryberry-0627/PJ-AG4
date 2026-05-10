@@ -50,6 +50,7 @@ lessons.md               Anti-regression notes
 - `simulation_results.csv`
 - `strategy_analysis.pdf`
 - `strategy_dashboard.html`
+- `simulation_report.md`
 
 ## Run
 
@@ -118,6 +119,7 @@ Artifacts:
 - `outputs/default_run/simulation_results.csv`
 - `outputs/default_run/strategy_analysis.pdf`
 - `outputs/default_run/strategy_dashboard.html`
+- `outputs/default_run/simulation_report.md`
 
 The HTML dashboard is the local sandbox surface for:
 
@@ -188,4 +190,4 @@ pytest
 
 ## Status
 
-The repository currently has a runnable simulation core, switchable heuristic and LLM agent modes, CSV export, PDF chart generation, an interactive HTML dashboard artifact, quant tooling, and passing tests.
+The repository currently has a runnable simulation core, switchable heuristic and LLM agent modes, CSV export, PDF chart generation, an interactive HTML dashboard artifact, Markdown report generation, quant tooling, and passing tests.
