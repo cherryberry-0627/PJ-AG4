@@ -3,9 +3,9 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from ..config import SimulationConfig
-from ..contracts import AgentAction
+from ..contracts import AgentAction, SettlementRow
 from ..data.observation import ObservationBuilder
-from ..environment import MarketEnvironment, SettlementRow
+from ..environment import MarketEnvironment
 from ..timeseries import DemandSeriesGenerator
 
 

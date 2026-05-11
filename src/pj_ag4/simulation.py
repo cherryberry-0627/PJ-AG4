@@ -8,7 +8,7 @@ from .config import SimulationConfig, default_simulation_config
 from .contracts import SimulationResult
 from .dashboard import create_dashboard
 from .core import SimulationRuntime
-from .environment import write_rows_to_csv
+from .io import write_rows_to_csv
 from .visualization import create_summary_figure
 
 
