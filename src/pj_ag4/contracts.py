@@ -1,3 +1,8 @@
+"""
+重构3：
+将SettlementRow类移入contracts模块。
+"""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -26,6 +31,57 @@ class MarketObservation:
     own_reputation: float
     market_avg_price: float
     market_volatility: float
+
+
+@dataclass(frozen=True)
+class SettlementRow:
+    """单回合、单agent的完整字段记录"""
+    seed: int
+    round: int
+    agent_name: str
+    agent_role: str
+    agent_action: str
+    forecast_demand: int
+    demand_true: int
+    demand_obs: int
+    trend_component: float
+    season_component: float
+    shock_component: float
+    noise_component: float
+    market_avg_price: float
+    market_total_sales: float
+    inventory_start: float
+    reputation_start: float
+    price: float
+    quantity: int
+    available_supply: float
+    attractiveness: float
+    demand_share: float
+    allocated_demand: float
+    shortage_pre_transfer: float
+    surplus_pre_transfer: float
+    transfer_in: float
+    transfer_out: float
+    transfer_cost: float
+    transfer_revenue: float
+    coop_accept_rate: float
+    realized_sales: float
+    shortage_post_transfer: float
+    inventory_end: float
+    obsolescence_units: float
+    revenue: float
+    prod_cost: float
+    holding_cost: float
+    obsolescence_cost: float
+    sla_penalty: float
+    menu_cost: float
+    profit: float
+    cum_profit: float
+    service_rate: float
+    help_ratio: float
+    dump_flag: int
+    default_flag: int
+    reputation_end: float
 
 
 @dataclass(frozen=True)

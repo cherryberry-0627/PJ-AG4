@@ -14,7 +14,8 @@ from .config import SimulationConfig, default_simulation_config
 from .core import SimulationRuntime
 from .dashboard import build_dashboard_payload, render_dashboard_html
 from .data.observation import ObservationBuilder
-from .environment import MarketEnvironment, SettlementRow
+from .contracts import SettlementRow
+from .environment import MarketEnvironment
 from .timeseries import DemandSeriesGenerator, DemandSnapshot
 
 LOCAL_LLM_BASE_URL = "http://127.0.0.1:8045/v1"

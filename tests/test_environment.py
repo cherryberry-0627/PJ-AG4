@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pj_ag4.agents import AgentAction
+from pj_ag4.contracts import AgentAction
 from pj_ag4.config import default_simulation_config
 from pj_ag4.environment import MarketEnvironment
 from pj_ag4.timeseries import DemandSnapshot

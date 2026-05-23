@@ -1,12 +1,15 @@
+"""
+重构3：
+拆分environment模块中的数据模型储存职责与io职责
+"""
+
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-import csv
-from pathlib import Path
+from dataclasses import dataclass
 from statistics import median
 
 from .config import AgentConfig, MarketConfig, SimulationConfig
-from .contracts import AgentAction
+from .contracts import AgentAction, SettlementRow
 from .timeseries import DemandSnapshot
 from .utils import clamp, sigmoid, stable_softmax
 
@@ -20,57 +23,6 @@ class AgentState:
     last_shortage: float = 0.0
     last_price: float = 0.0
     last_dump_flag: bool = False
-
-
-@dataclass(frozen=True)
-class SettlementRow:
-    seed: int
-    round: int
-    agent_name: str
-    agent_role: str
-    agent_action: str
-    forecast_demand: int
-    demand_true: int
-    demand_obs: int
-    trend_component: float
-    season_component: float
-    shock_component: float
-    noise_component: float
-    market_avg_price: float
-    market_total_sales: float
-    inventory_start: float
-    reputation_start: float
-    price: float
-    quantity: int
-    available_supply: float
-    attractiveness: float
-    demand_share: float
-    allocated_demand: float
-    shortage_pre_transfer: float
-    surplus_pre_transfer: float
-    transfer_in: float
-    transfer_out: float
-    transfer_cost: float
-    transfer_revenue: float
-    coop_accept_rate: float
-    realized_sales: float
-    shortage_post_transfer: float
-    inventory_end: float
-    obsolescence_units: float
-    revenue: float
-    prod_cost: float
-    holding_cost: float
-    obsolescence_cost: float
-    sla_penalty: float
-    menu_cost: float
-    profit: float
-    cum_profit: float
-    service_rate: float
-    help_ratio: float
-    dump_flag: int
-    default_flag: int
-    reputation_end: float
-
 
 class MarketEnvironment:
     def __init__(self, config: SimulationConfig) -> None:
@@ -322,14 +274,3 @@ class MarketEnvironment:
                 )
             )
         return rows
-
-
-def write_rows_to_csv(rows: list[SettlementRow], output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    fieldnames = list(asdict(rows[0]).keys()) if rows else []
-    with output_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        if fieldnames:
-            writer.writeheader()
-            for row in rows:
-                writer.writerow(asdict(row))

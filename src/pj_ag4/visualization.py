@@ -8,7 +8,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from .environment import SettlementRow
+from .contracts import SettlementRow
 
 
 def create_summary_figure(rows: list[SettlementRow], output_path: Path) -> None:

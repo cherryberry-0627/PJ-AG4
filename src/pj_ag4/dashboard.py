@@ -8,7 +8,7 @@ from statistics import mean, pstdev
 from typing import Any, Sequence
 
 from .config import SimulationConfig
-from .environment import SettlementRow
+from .contracts import SettlementRow
 
 
 AGENT_COLORS = {

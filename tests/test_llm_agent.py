@@ -97,9 +97,7 @@ class _LengthButCompleteClient:
 
 
 def test_run_simulation_with_llm_mode_uses_openai_compatible_client(monkeypatch, tmp_path) -> None:
-    from pj_ag4 import agents as agents_module
-
-    monkeypatch.setattr(agents_module, "_build_openai_client", lambda llm_config: _FakeClient())
+    monkeypatch.setattr("pj_ag4.agents.factory.build_openai_client", lambda llm_config: _FakeClient())
 
     config = default_simulation_config(
         seed=3,
@@ -136,9 +134,7 @@ def test_llm_mode_requires_api_key(monkeypatch, tmp_path) -> None:
 
 
 def test_llm_mode_retries_when_finish_reason_is_length(monkeypatch, tmp_path) -> None:
-    from pj_ag4 import agents as agents_module
-
-    monkeypatch.setattr(agents_module, "_build_openai_client", lambda llm_config: _RetryFakeClient())
+    monkeypatch.setattr("pj_ag4.agents.factory.build_openai_client", lambda llm_config: _RetryFakeClient())
 
     config = default_simulation_config(
         seed=4,
@@ -155,9 +151,7 @@ def test_llm_mode_retries_when_finish_reason_is_length(monkeypatch, tmp_path) ->
 
 
 def test_llm_mode_accepts_complete_json_even_if_finish_reason_is_length(monkeypatch, tmp_path) -> None:
-    from pj_ag4 import agents as agents_module
-
-    monkeypatch.setattr(agents_module, "_build_openai_client", lambda llm_config: _LengthButCompleteClient())
+    monkeypatch.setattr("pj_ag4.agents.factory.build_openai_client", lambda llm_config: _LengthButCompleteClient())
 
     config = default_simulation_config(
         seed=4,
