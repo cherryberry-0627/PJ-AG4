@@ -132,7 +132,7 @@ The HTML dashboard is the local sandbox surface for:
 
 If you want to tweak the dashboard layout directly, edit the root template file:
 
-- [dashboard_template.html](/Users/yijunrong/Desktop/PJ-AG4/dashboard_template.html)
+- `dashboard_template.html`
 
 The generator now prefers this file over the built-in template in Python. After editing it, regenerate the dashboard:
 
@@ -151,7 +151,7 @@ If you prefer a localhost web surface instead of opening the exported file direc
 Recommended startup flow:
 
 ```bash
-cd /Users/yijunrong/Desktop/PJ-AG4
+cd PJ-AG4
 python3 -m pj_ag4.web --host 127.0.0.1 --port 8766
 ```
 

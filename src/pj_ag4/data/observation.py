@@ -53,7 +53,7 @@ class ObservationBuilder:
             own_inventory=state.inventory,
             own_last_profit=state.last_profit,
             own_last_shortage=state.last_shortage,
-            own_reputation=state.reputation,
+            own_reputation=self._env.reputation_for(agent_name),
             market_avg_price=avg_price,
             market_volatility=rolling_volatility(observed_history, window=self._window),
         )
@@ -68,4 +68,4 @@ class ObservationBuilder:
         self._history.demand_history.append(snapshot.true_demand)
         self._history.observed_history.append(snapshot.observed_demand)
         self._history.price_history.append([actions[name].price for name in ordered_names])
-        self._history.reputation_history.append([self._env.states[name].reputation for name in ordered_names])
+        self._history.reputation_history.append([self._env.reputation_for(name) for name in ordered_names])

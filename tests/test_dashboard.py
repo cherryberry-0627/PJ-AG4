@@ -15,6 +15,9 @@ def test_build_dashboard_payload_contains_market_and_agent_sections(tmp_path) ->
     assert len(payload["agents"]) == 3
     assert len(payload["roundsData"]) == 3
     assert "totalProfit" in payload["overview"]
+    assert "avgDeliveryReputation" in payload["agents"][0]["summary"]
+    assert "repDelivery" in payload["agents"][0]["series"]
+    assert "reputationComponents" in payload["roundsData"][0]["agents"][0]
 
 
 def test_create_dashboard_writes_html_artifact(tmp_path) -> None:

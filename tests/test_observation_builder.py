@@ -26,11 +26,10 @@ def test_observation_builder_keeps_windowed_history() -> None:
         agent_name="Hyperscaler",
         round_index=5,
         observed_demand=120,
-        current_reputations={name: state.reputation for name, state in env.states.items()},
+        current_reputations=env.current_reputations(),
     )
 
     assert len(observation.demand_history) == 3
     assert len(observation.observed_demand_history) == 3
     assert len(observation.price_history) == 3
     assert len(observation.reputation_history) == 3
-

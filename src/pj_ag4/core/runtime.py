@@ -20,7 +20,7 @@ class SimulationRuntime:
         rows: list[SettlementRow] = []
         for round_index in range(self._config.rounds):
             snapshot = self._generator.step(round_index)
-            current_reputations = {name: state.reputation for name, state in self._env.states.items()}
+            current_reputations = self._env.current_reputations()
             actions: dict[str, AgentAction] = {}
             for name, agent in agents.items():
                 observation = self._observations.build(
@@ -30,6 +30,7 @@ class SimulationRuntime:
                     current_reputations=current_reputations,
                 )
                 actions[name] = agent.decide(observation)
+            actions = self._env.validate_actions(actions)
             round_rows = self._env.step(
                 seed=self._config.seed,
                 round_index=round_index,

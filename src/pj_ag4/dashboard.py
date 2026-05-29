@@ -44,9 +44,15 @@ def _summarize_agent_rows(agent_rows: Sequence[SettlementRow]) -> dict[str, floa
         "meanProfit": mean(profits) if profits else 0.0,
         "profitVolatility": pstdev(profits) if len(profits) > 1 else 0.0,
         "avgReputation": mean(row.reputation_end for row in agent_rows) if agent_rows else 0.0,
+        "avgDeliveryReputation": mean(row.rep_delivery_end for row in agent_rows) if agent_rows else 0.0,
+        "avgPricingReputation": mean(row.rep_pricing_end for row in agent_rows) if agent_rows else 0.0,
+        "avgCooperationReputation": mean(row.rep_cooperation_end for row in agent_rows) if agent_rows else 0.0,
         "avgServiceRate": mean(row.service_rate for row in agent_rows) if agent_rows else 0.0,
+        "avgForecastError": mean(row.forecast_error_abs for row in agent_rows) if agent_rows else 0.0,
         "avgPrice": mean(row.price for row in agent_rows) if agent_rows else 0.0,
         "totalShortage": sum(row.shortage_post_transfer for row in agent_rows),
+        "transferAttempts": float(sum(row.transfer_attempts for row in agent_rows)),
+        "transferAccepts": float(sum(row.transfer_accepts for row in agent_rows)),
         "defaults": float(sum(row.default_flag for row in agent_rows)),
         "dumps": float(sum(row.dump_flag for row in agent_rows)),
     }
@@ -115,7 +121,12 @@ def build_dashboard_payload(
         rows_by_agent[row.agent_name].append(row)
 
     ordered_rounds = sorted(rows_by_round)
-    ordered_agents = sorted(rows_by_agent)
+    if config is not None:
+        configured_order = [agent.name for agent in config.agents if agent.name in rows_by_agent]
+        ordered_agents = configured_order + [name for name in rows_by_agent if name not in configured_order]
+    else:
+        ordered_agents = sorted(rows_by_agent)
+    agent_order_index = {name: index for index, name in enumerate(ordered_agents)}
     resolved_strategy = strategy_name or (config.agent_mode if config else "heuristic")
     agent_summary_map = {
         agent_name: _summarize_agent_rows(sorted(agent_rows, key=lambda item: item.round))
@@ -124,7 +135,7 @@ def build_dashboard_payload(
 
     rounds_payload: list[dict[str, Any]] = []
     for round_index in ordered_rounds:
-        round_rows = sorted(rows_by_round[round_index], key=lambda item: item.agent_name)
+        round_rows = sorted(rows_by_round[round_index], key=lambda item: agent_order_index.get(item.agent_name, len(agent_order_index)))
         first_row = round_rows[0]
         total_demand = float(first_row.demand_true)
         total_sales = sum(row.realized_sales for row in round_rows)
@@ -139,15 +150,28 @@ def build_dashboard_payload(
                     "price": row.price,
                     "quantity": row.quantity,
                     "forecastDemand": row.forecast_demand,
+                    "forecastError": row.forecast_error_abs,
                     "allocatedDemand": row.allocated_demand,
                     "realizedSales": row.realized_sales,
                     "shortage": row.shortage_post_transfer,
                     "profit": row.profit,
                     "cumProfit": row.cum_profit,
                     "reputation": row.reputation_end,
+                    "repDelivery": row.rep_delivery_end,
+                    "repPricing": row.rep_pricing_end,
+                    "repCooperation": row.rep_cooperation_end,
+                    "reputationComponents": {
+                        "delivery": row.rep_delivery_end,
+                        "pricing": row.rep_pricing_end,
+                        "cooperation": row.rep_cooperation_end,
+                    },
                     "serviceRate": row.service_rate,
                     "transferIn": row.transfer_in,
                     "transferOut": row.transfer_out,
+                    "transferAttempts": row.transfer_attempts,
+                    "transferAccepts": row.transfer_accepts,
+                    "coopProbability": row.coop_probability,
+                    "coopAcceptRate": row.coop_accept_rate,
                     "dumpFlag": row.dump_flag,
                     "defaultFlag": row.default_flag,
                 }
@@ -193,9 +217,15 @@ def build_dashboard_payload(
                     "meanProfit": summary_metrics["meanProfit"],
                     "profitVolatility": summary_metrics["profitVolatility"],
                     "avgReputation": summary_metrics["avgReputation"],
+                    "avgDeliveryReputation": summary_metrics["avgDeliveryReputation"],
+                    "avgPricingReputation": summary_metrics["avgPricingReputation"],
+                    "avgCooperationReputation": summary_metrics["avgCooperationReputation"],
                     "avgServiceRate": summary_metrics["avgServiceRate"],
+                    "avgForecastError": summary_metrics["avgForecastError"],
                     "avgPrice": summary_metrics["avgPrice"],
                     "totalShortage": summary_metrics["totalShortage"],
+                    "transferAttempts": summary_metrics["transferAttempts"],
+                    "transferAccepts": summary_metrics["transferAccepts"],
                     "defaults": summary_metrics["defaults"],
                     "dumps": summary_metrics["dumps"],
                 },
@@ -206,7 +236,11 @@ def build_dashboard_payload(
                     "profit": [row.profit for row in agent_rows],
                     "cumProfit": [row.cum_profit for row in agent_rows],
                     "reputation": [row.reputation_end for row in agent_rows],
+                    "repDelivery": [row.rep_delivery_end for row in agent_rows],
+                    "repPricing": [row.rep_pricing_end for row in agent_rows],
+                    "repCooperation": [row.rep_cooperation_end for row in agent_rows],
                     "serviceRate": [row.service_rate for row in agent_rows],
+                    "forecastError": [row.forecast_error_abs for row in agent_rows],
                 },
             }
         )
@@ -234,6 +268,7 @@ def build_dashboard_payload(
     }
 
     return {
+        "schemaVersion": "dashboard.v1",
         "meta": {
             "seed": rows[0].seed,
             "strategy": resolved_strategy,

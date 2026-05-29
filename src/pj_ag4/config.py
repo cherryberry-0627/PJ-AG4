@@ -36,11 +36,15 @@ class MarketConfig:
     observation_noise_sigma: float = 5.0
     demand_floor: int = 50
     reputation_weight: float = 1.2
+    reputation_delivery_weight: float = 0.5
+    reputation_pricing_weight: float = 0.3
+    reputation_cooperation_weight: float = 0.2
     price_weight: float = 0.7
     cooperation_alpha0: float = -0.8
     cooperation_alpha1: float = 2.5
     cooperation_alpha2: float = 1.2
     cooperation_alpha3: float = 1.5
+    indirect_reciprocity_alpha: float = 0.1
     transfer_markup: float = 0.05
     max_transfer: float = 15.0
     reputation_update_rate: float = 0.25
@@ -68,6 +72,7 @@ class AgentConfig:
     linear_cost: float
     quadratic_cost: float
     holding_cost_rate: float
+    obsolescence_rate: float
     obsolescence_penalty: float
     sla_penalty: float
     menu_cost_rate: float

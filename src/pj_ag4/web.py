@@ -197,7 +197,7 @@ def iter_runtime_payloads(
             shock_magnitude=config.market.shock_magnitude,
             shock_round=config.market.shock_round,
         )
-        current_reputations = {name: state.reputation for name, state in env.states.items()}
+        current_reputations = env.current_reputations()
         actions = {}
         for name, agent in agents.items():
             observation = observations.build(
@@ -207,6 +207,7 @@ def iter_runtime_payloads(
                 current_reputations=current_reputations,
             )
             actions[name] = agent.decide(observation)
+        actions = env.validate_actions(actions)
         round_rows = env.step(
             seed=config.seed,
             round_index=round_index,

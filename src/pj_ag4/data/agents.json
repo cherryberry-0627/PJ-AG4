@@ -10,7 +10,7 @@
         "allocator_style": "capacity_expander",
         "risk_style": "growth_tolerant",
         "base_price": 4.6,
-        "price_floor": 4.0,
+        "price_floor": 4.6,
         "price_ceiling": 6.0,
         "price_step": 0.2,
         "quantity_step": 10,
@@ -21,6 +21,7 @@
         "linear_cost": 3.0,
         "quadratic_cost": 0.015,
         "holding_cost_rate": 0.10,
+        "obsolescence_rate": 0.15,
         "obsolescence_penalty": 0.25,
         "sla_penalty": 1.20,
         "menu_cost_rate": 0.02
@@ -45,6 +46,7 @@
         "linear_cost": 3.4,
         "quadratic_cost": 0.010,
         "holding_cost_rate": 0.08,
+        "obsolescence_rate": 0.10,
         "obsolescence_penalty": 0.20,
         "sla_penalty": 1.50,
         "menu_cost_rate": 0.02
@@ -69,6 +71,7 @@
         "linear_cost": 3.6,
         "quadratic_cost": 0.008,
         "holding_cost_rate": 0.12,
+        "obsolescence_rate": 0.12,
         "obsolescence_penalty": 0.22,
         "sla_penalty": 1.30,
         "menu_cost_rate": 0.03

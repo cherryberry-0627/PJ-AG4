@@ -675,6 +675,7 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `reputation_start` | 轮初声誉 $R_{i,t}$ |
 | `forecast_demand` | 预测需求 $\hat D_{i,t}$ |
 | `forecast_error_abs` | 绝对预测误差 |
+| `forecast_error_sq` | 平方预测误差 |
 | `price` | 报价 $p_{i,t}$ |
 | `quantity` | 新增节点量 $q_{i,t}$ |
 | `available_supply` | 初始可售供给 $A_{i,t}$ |
@@ -692,6 +693,9 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `transfer_out` | 调出节点量 |
 | `transfer_cost` | 调入成本 |
 | `transfer_revenue` | 调出收入 |
+| `transfer_attempts` | 本轮作为供给方被请求协作的次数 |
+| `transfer_accepts` | 本轮作为供给方接受协作的次数 |
+| `coop_probability` | 本轮协作接受概率均值 |
 | `coop_accept_rate` | 本轮合作接受率 |
 
 #### 结算字段
@@ -719,6 +723,9 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `help_ratio` | 协作贡献率 |
 | `dump_flag` | 是否恶意倾销 |
 | `default_flag` | 是否严重违约 |
+| `rep_delivery_end` | 更新后履约声誉 |
+| `rep_pricing_end` | 更新后定价声誉 |
+| `rep_cooperation_end` | 更新后协作声誉 |
 | `reputation_end` | 更新后声誉 |
 
 ### 5.2 `strategy_analysis.pdf` 内容规划

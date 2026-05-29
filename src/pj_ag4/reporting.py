@@ -49,9 +49,14 @@ def _agent_summary_rows(rows: Sequence[SettlementRow]) -> list[list[object]]:
                 final.agent_role,
                 final.cum_profit,
                 mean(row.profit for row in agent_rows),
+                mean(row.forecast_error_abs for row in agent_rows),
                 mean(row.price for row in agent_rows),
                 sum(row.realized_sales for row in agent_rows),
                 mean(row.service_rate for row in agent_rows),
+                sum(row.transfer_in for row in agent_rows),
+                sum(row.transfer_out for row in agent_rows),
+                sum(row.dump_flag for row in agent_rows),
+                sum(row.default_flag for row in agent_rows),
                 final.inventory_end,
                 final.reputation_end,
                 total_shortage,
@@ -149,11 +154,15 @@ def _strategy_commentary(rows: Sequence[SettlementRow]) -> list[str]:
     fulfillment = (
         market_total_sales / market_total_demand if market_total_demand else 0.0
     )
+    total_transfer = sum(row.transfer_in for row in rows)
+    total_dump = sum(row.dump_flag for row in rows)
+    total_default = sum(row.default_flag for row in rows)
     return [
         f"**Winner:** `{winner_name}` ends with cumulative profit `{winner_row.cum_profit:.2f}`, the highest value in this run.",
         f"**Service leader:** `{service_leader_name}` posts the strongest average service rate at `{mean(row.service_rate for row in service_leader_rows):.2%}`.",
         f"**Pricing posture:** `{price_leader_name}` maintains the highest average price at `{mean(row.price for row in price_leader_rows):.2f}`.",
         f"**Market fulfillment:** the run sells `{market_total_sales:.2f}` units against `{market_total_demand:.2f}` true demand for a fulfillment ratio of `{fulfillment:.2%}`.",
+        f"**Operational stress:** peer transfers total `{total_transfer:.2f}` units, with `{int(total_dump)}` dump flags and `{int(total_default)}` default flags.",
     ]
 
 
@@ -220,9 +229,14 @@ def write_simulation_report(
                 "Role",
                 "Final Cum Profit",
                 "Avg Profit",
+                "Avg Forecast Error",
                 "Avg Price",
                 "Total Sales",
                 "Avg Service Rate",
+                "Transfer In",
+                "Transfer Out",
+                "Dump Flags",
+                "Default Flags",
                 "Final Inventory",
                 "Final Reputation",
                 "Total Shortage",

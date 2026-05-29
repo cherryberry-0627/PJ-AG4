@@ -42,6 +42,8 @@ class SettlementRow:
     agent_role: str
     agent_action: str
     forecast_demand: int
+    forecast_error_abs: float
+    forecast_error_sq: float
     demand_true: int
     demand_obs: int
     trend_component: float
@@ -52,6 +54,9 @@ class SettlementRow:
     market_total_sales: float
     inventory_start: float
     reputation_start: float
+    rep_delivery_start: float
+    rep_pricing_start: float
+    rep_cooperation_start: float
     price: float
     quantity: int
     available_supply: float
@@ -64,6 +69,9 @@ class SettlementRow:
     transfer_out: float
     transfer_cost: float
     transfer_revenue: float
+    transfer_attempts: int
+    transfer_accepts: int
+    coop_probability: float
     coop_accept_rate: float
     realized_sales: float
     shortage_post_transfer: float
@@ -81,6 +89,9 @@ class SettlementRow:
     help_ratio: float
     dump_flag: int
     default_flag: int
+    rep_delivery_end: float
+    rep_pricing_end: float
+    rep_cooperation_end: float
     reputation_end: float
 
 
