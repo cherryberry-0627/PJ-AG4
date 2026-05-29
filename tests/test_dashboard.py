@@ -18,6 +18,9 @@ def test_build_dashboard_payload_contains_market_and_agent_sections(tmp_path) ->
     assert "avgDeliveryReputation" in payload["agents"][0]["summary"]
     assert "repDelivery" in payload["agents"][0]["series"]
     assert "reputationComponents" in payload["roundsData"][0]["agents"][0]
+    assert "roundTrace" in payload["roundsData"][0]
+    assert "decisionTrace" in payload["roundsData"][0]["agents"][0]
+    assert payload["roundsData"][0]["agents"][0]["decisionReason"]
 
 
 def test_create_dashboard_writes_html_artifact(tmp_path) -> None:

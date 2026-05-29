@@ -2105,6 +2105,7 @@
               <p class="log-body">
                 &gt; ${escapeHtml(formatActionText(agent.actionText))}
                 <span class="muted-copy">price ${formatNumber(agent.price, 2)} | qty ${formatNumber(agent.quantity, 0)} | sold ${formatNumber(agent.realizedSales, 1)} | short ${formatNumber(agent.shortage, 1)} | pnl ${formatMoney(agent.profit)}</span>
+                <span class="muted-copy">why: ${escapeHtml(agent.decisionReason || "no structured trace")}</span>
               </p>
               <div class="loading-bar-container">
                 <div class="loading-bar" style="width:${serviceWidth}%;background:${meta.color};box-shadow:0 0 8px ${meta.color};"></div>
@@ -2148,6 +2149,7 @@
               </div>
 
               <div class="system-message-box">&gt; ${escapeHtml(formatActionText(agent.actionText))}</div>
+              <p class="agent-copy">${escapeHtml(agent.decisionReason || "No structured decision trace was recorded for this action.")}</p>
               <p class="agent-copy">${escapeHtml(meta.persona)}</p>
 
               <div class="agent-params">

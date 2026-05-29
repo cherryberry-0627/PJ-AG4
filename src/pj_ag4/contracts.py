@@ -5,8 +5,47 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+import json
 from pathlib import Path
+from typing import Any
+
+
+@dataclass(frozen=True)
+class DecisionTrace:
+    source: str
+    summary: str
+    forecast_base: float = 0.0
+    forecast_adjustment: float = 0.0
+    price_base: float = 0.0
+    price_adjustment: float = 0.0
+    quantity_target: float = 0.0
+    risk_gate_adjustment: str = "none"
+    final_forecast: int = 0
+    final_price: float = 0.0
+    final_quantity: int = 0
+    fallback_used: bool = False
+    llm_status: str = ""
+    llm_error: str = ""
+    llm_prompt_excerpt: str = ""
+
+    def to_json(self) -> str:
+        return json.dumps(asdict(self), ensure_ascii=False, separators=(",", ":"))
+
+    @classmethod
+    def from_json(cls, value: str | None) -> "DecisionTrace | None":
+        if not value:
+            return None
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(payload, dict):
+            return None
+        return cls(**{key: payload.get(key) for key in cls.__dataclass_fields__})
+
+    def to_public_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)
@@ -14,6 +53,7 @@ class AgentAction:
     forecast_demand: int
     price: float
     quantity: int
+    trace: DecisionTrace | None = None
 
 
 @dataclass(frozen=True)
@@ -41,6 +81,9 @@ class SettlementRow:
     agent_name: str
     agent_role: str
     agent_action: str
+    decision_source: str
+    decision_reason: str
+    decision_trace: str
     forecast_demand: int
     forecast_error_abs: float
     forecast_error_sq: float
@@ -93,6 +136,22 @@ class SettlementRow:
     rep_pricing_end: float
     rep_cooperation_end: float
     reputation_end: float
+
+
+@dataclass(frozen=True)
+class RoundTrace:
+    round_index: int
+    demand_true: float
+    demand_observed: float
+    market_total_sales: float
+    market_avg_price: float
+    transfer_volume: float
+    default_count: int
+    dump_count: int
+    summary: str
+
+    def to_public_dict(self) -> dict[str, Any]:
+        return asdict(self)
 
 
 @dataclass(frozen=True)

@@ -9,10 +9,11 @@ LLM驱动的Agent pipeline
 """
 
 import json
+from dataclasses import replace
 from typing import Any
 
 from ..config import AgentConfig, LLMConfig
-from ..contracts import AgentAction, MarketObservation
+from ..contracts import AgentAction, DecisionTrace, MarketObservation
 from ..providers import build_openai_client, query_json_completion
 from ..utils import int_round_to_step, round_to_step
 from .pipeline import RolePipelineAgent
@@ -36,6 +37,8 @@ class LLMPlanningStage:
         # 输入缓存：相同观察值跳过重复 LLM 调用
         self._cache_key: tuple[Any, ...] | None = None
         self._cache_value: dict[str, Any] | None = None
+        self.last_prompt_excerpt = ""
+        self.last_status = "idle"
 
     def _cache_token(self, observation: MarketObservation) -> tuple[Any, ...]:
         """从观察中提取用于缓存的key字段。"""
@@ -55,21 +58,26 @@ class LLMPlanningStage:
         token = self._cache_token(observation)
         if self._cache_key == token and self._cache_value is not None:
             return self._cache_value
+        system_prompt = self._system_prompt(compact=False)
+        user_prompt = self._user_prompt(observation, fallback, compact=False)
         messages = [
-            {"role": "system", "content": self._system_prompt(compact=False)},
-            {"role": "user", "content": self._user_prompt(observation, fallback, compact=False)},
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
         ]
         # 重试时用 compact prompt（减少 token、降低失败概率）
         retry_messages = [
             {"role": "system", "content": self._system_prompt(compact=True)},
             {"role": "user", "content": self._user_prompt(observation, fallback, compact=True)},
         ]
+        self.last_prompt_excerpt = user_prompt[:500]
+        self.last_status = "requested"
         plan = query_json_completion(
             client=self._client,
             llm_config=self._llm_config,
             messages=messages,
             retry_messages=retry_messages,
         )
+        self.last_status = "ok"
         self._cache_key = token
         self._cache_value = plan
         return plan
@@ -168,12 +176,23 @@ class LLMForecasterStage:
 
     def __init__(self, planner: LLMPlanningStage) -> None:
         self._planner = planner
+        self.last_trace: dict[str, float | str] = {}
 
     def run(self, observation: MarketObservation, *, fallback: AgentAction | None = None) -> int:
         if fallback is None:
             raise ValueError("LLM 预测阶段需要 fallback action")
         plan = self._planner.run(observation, fallback)
-        return max(0, int(round(float(plan.get("forecast_demand", fallback.forecast_demand)))))
+        raw_value = float(plan.get("forecast_demand", fallback.forecast_demand))
+        final_value = max(0, int(round(raw_value)))
+        self.last_trace = {
+            "base": fallback.forecast_demand,
+            "adjustment": final_value - fallback.forecast_demand,
+            "raw": raw_value,
+            "final": float(final_value),
+            "llm_status": self._planner.last_status,
+            "llm_prompt_excerpt": self._planner.last_prompt_excerpt,
+        }
+        return final_value
 
 
 class LLMPricerStage:
@@ -182,18 +201,29 @@ class LLMPricerStage:
     def __init__(self, config: AgentConfig, planner: LLMPlanningStage) -> None:
         self._config = config
         self._planner = planner
+        self.last_trace: dict[str, float | str] = {}
 
     def run(self, observation: MarketObservation, forecast: int, *, fallback: AgentAction | None = None) -> float:
         del forecast
         if fallback is None:
             raise ValueError("LLM 定价阶段需要 fallback action")
         plan = self._planner.run(observation, fallback)
-        return round_to_step(
-            float(plan.get("price", fallback.price)),
+        raw_value = float(plan.get("price", fallback.price))
+        final_value = round_to_step(
+            raw_value,
             self._config.price_step,
             self._config.price_floor,
             self._config.price_ceiling,
         )
+        self.last_trace = {
+            "base": fallback.price,
+            "adjustment": final_value - fallback.price,
+            "raw": raw_value,
+            "final": final_value,
+            "llm_status": self._planner.last_status,
+            "llm_prompt_excerpt": self._planner.last_prompt_excerpt,
+        }
+        return final_value
 
 
 class LLMAllocatorStage:
@@ -202,18 +232,29 @@ class LLMAllocatorStage:
     def __init__(self, config: AgentConfig, planner: LLMPlanningStage) -> None:
         self._config = config
         self._planner = planner
+        self.last_trace: dict[str, float | str] = {}
 
     def run(self, observation: MarketObservation, forecast: int, price: float, *, fallback: AgentAction | None = None) -> int:
         del forecast, price
         if fallback is None:
             raise ValueError("LLM 分配阶段需要 fallback action")
         plan = self._planner.run(observation, fallback)
-        return int_round_to_step(
-            float(plan.get("quantity", fallback.quantity)),
+        raw_value = float(plan.get("quantity", fallback.quantity))
+        final_value = int_round_to_step(
+            raw_value,
             self._config.quantity_step,
             0,
             self._config.max_quantity,
         )
+        self.last_trace = {
+            "base": fallback.quantity,
+            "adjustment": final_value - fallback.quantity,
+            "target": raw_value,
+            "final": float(final_value),
+            "llm_status": self._planner.last_status,
+            "llm_prompt_excerpt": self._planner.last_prompt_excerpt,
+        }
+        return final_value
 
 
 class LLMPolicyAgent(RolePipelineAgent):
@@ -234,6 +275,7 @@ class LLMPolicyAgent(RolePipelineAgent):
             pricer=LLMPricerStage(config, planner),
             allocator=LLMAllocatorStage(config, planner),
             risk_gate=RiskGateStage(config),
+            trace_source="llm",
         )
         self._fallback_agent = fallback_agent
 
@@ -242,5 +284,18 @@ class LLMPolicyAgent(RolePipelineAgent):
         fallback = self._fallback_agent.decide(observation)
         try:
             return self._run_pipeline(observation, fallback=fallback)
-        except Exception:
-            return fallback
+        except Exception as exc:
+            trace = DecisionTrace(
+                source="llm_fallback",
+                summary=(
+                    f"LLM planning failed; fallback action used: "
+                    f"forecast={fallback.forecast_demand}, price={fallback.price:.2f}, quantity={fallback.quantity}"
+                ),
+                final_forecast=fallback.forecast_demand,
+                final_price=fallback.price,
+                final_quantity=fallback.quantity,
+                fallback_used=True,
+                llm_status="fallback",
+                llm_error=str(exc),
+            )
+            return replace(fallback, trace=trace)

@@ -27,6 +27,7 @@ class HeuristicForecasterStage:
         # adjust_fn 是 agent 的 hook 方法，传入观察 + 趋势返回调整值
         self._adjust_fn = adjust_fn
         self._style = style
+        self.last_trace: dict[str, float | str] = {}
 
     def run(self, observation: MarketObservation, *, fallback: AgentAction | None = None) -> int:
         del fallback
@@ -40,9 +41,19 @@ class HeuristicForecasterStage:
             forecast = 0.7 * base + 0.3 * history[-1]
         if len(history) >= 2:
             trend = (history[-1] - history[0]) / max(1, len(history) - 1)
-        forecast += self._adjust_fn(observation, trend)
-        forecast += forecaster_style_adjustment(self._style, observation, trend)
-        return max(0, int(round(forecast)))
+        hook_adjustment = self._adjust_fn(observation, trend)
+        style_adjustment = forecaster_style_adjustment(self._style, observation, trend)
+        forecast += hook_adjustment + style_adjustment
+        final_forecast = max(0, int(round(forecast)))
+        self.last_trace = {
+            "base": base if history else float(observation.observed_demand),
+            "adjustment": hook_adjustment + style_adjustment,
+            "hook_adjustment": hook_adjustment,
+            "style_adjustment": style_adjustment,
+            "trend": trend,
+            "final": float(final_forecast),
+        }
+        return final_forecast
 
 
 class HeuristicPricerStage:
@@ -57,12 +68,23 @@ class HeuristicPricerStage:
         self._config = config
         self._adjust_fn = adjust_fn
         self._style = style
+        self.last_trace: dict[str, float | str] = {}
 
     def run(self, observation: MarketObservation, forecast: int, *, fallback: AgentAction | None = None) -> float:
         del fallback
-        value = self._config.base_price + self._adjust_fn(observation, forecast)
-        value += pricer_style_adjustment(self._style, observation, forecast)
-        return round_to_step(value, self._config.price_step, self._config.price_floor, self._config.price_ceiling)
+        hook_adjustment = self._adjust_fn(observation, forecast)
+        style_adjustment = pricer_style_adjustment(self._style, observation, forecast)
+        value = self._config.base_price + hook_adjustment + style_adjustment
+        final_price = round_to_step(value, self._config.price_step, self._config.price_floor, self._config.price_ceiling)
+        self.last_trace = {
+            "base": self._config.base_price,
+            "adjustment": hook_adjustment + style_adjustment,
+            "hook_adjustment": hook_adjustment,
+            "style_adjustment": style_adjustment,
+            "raw": value,
+            "final": final_price,
+        }
+        return final_price
 
 
 class HeuristicAllocatorStage:
@@ -77,12 +99,21 @@ class HeuristicAllocatorStage:
         self._config = config
         self._target_fn = target_fn
         self._style = style
+        self.last_trace: dict[str, float | str] = {}
 
     def run(self, observation: MarketObservation, forecast: int, price: float, *, fallback: AgentAction | None = None) -> int:
         del price, fallback
         target = self._target_fn(observation, forecast)
-        target += allocator_style_adjustment(self._style, observation, forecast)
-        return int_round_to_step(target, self._config.quantity_step, 0, self._config.max_quantity)
+        style_adjustment = allocator_style_adjustment(self._style, observation, forecast)
+        raw_target = target + style_adjustment
+        final_quantity = int_round_to_step(raw_target, self._config.quantity_step, 0, self._config.max_quantity)
+        self.last_trace = {
+            "base": target,
+            "adjustment": style_adjustment,
+            "target": raw_target,
+            "final": float(final_quantity),
+        }
+        return final_quantity
 
 
 # ── Agent 类层次 ───────────────────────────────────────────
@@ -107,6 +138,7 @@ class HeuristicAgent(RolePipelineAgent):
             pricer=pricer,
             allocator=allocator,
             risk_gate=RiskGateStage(config),
+            trace_source="heuristic",
         )
 
     def _forecast_adjustment(self, observation: MarketObservation, trend: float) -> float:

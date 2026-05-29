@@ -5,7 +5,7 @@ from dataclasses import replace
 import pytest
 
 from pj_ag4.config import MarketConfig, default_simulation_config
-from pj_ag4.contracts import AgentAction
+from pj_ag4.contracts import AgentAction, DecisionTrace
 from pj_ag4.environment import MarketEnvironment
 from pj_ag4.timeseries import DemandSnapshot
 
@@ -215,3 +215,37 @@ def test_forecast_error_fields_are_recorded() -> None:
     assert by_name["Hyperscaler"].forecast_error_abs == pytest.approx(20)
     assert by_name["Hyperscaler"].forecast_error_sq == pytest.approx(400)
     assert by_name["SpotBroker"].forecast_error_abs == pytest.approx(0)
+
+
+def test_decision_trace_is_written_to_settlement_row() -> None:
+    config = default_simulation_config(seed=5, rounds=1)
+    env = MarketEnvironment(config)
+    snapshot = DemandSnapshot(
+        round_index=0,
+        true_demand=200,
+        observed_demand=198,
+        trend_component=180.0,
+        seasonal_component=0.0,
+        shock_component=0.0,
+        noise_component=0.0,
+    )
+    trace = DecisionTrace(
+        source="test",
+        summary="test trace summary",
+        forecast_base=190.0,
+        final_forecast=200,
+        final_price=4.2,
+        final_quantity=80,
+    )
+    actions = {
+        "Hyperscaler": AgentAction(forecast_demand=200, price=4.2, quantity=80, trace=trace),
+        "PremiumCloud": AgentAction(forecast_demand=200, price=5.6, quantity=50),
+        "SpotBroker": AgentAction(forecast_demand=200, price=4.8, quantity=40),
+    }
+
+    rows = env.step(seed=config.seed, round_index=0, snapshot=snapshot, actions=actions)
+    hyperscaler = next(row for row in rows if row.agent_name == "Hyperscaler")
+
+    assert hyperscaler.decision_source == "test"
+    assert hyperscaler.decision_reason == "test trace summary"
+    assert DecisionTrace.from_json(hyperscaler.decision_trace) == trace

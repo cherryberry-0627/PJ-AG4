@@ -121,7 +121,7 @@ class MarketEnvironment:
         quantity = int(round(float(action.quantity) / agent_cfg.quantity_step) * agent_cfg.quantity_step)
         quantity = int(clamp(quantity, 0, agent_cfg.max_quantity))
         forecast = max(0, int(round(float(action.forecast_demand))))
-        return AgentAction(forecast_demand=forecast, price=price, quantity=quantity)
+        return AgentAction(forecast_demand=forecast, price=price, quantity=quantity, trace=action.trace)
 
     def validate_actions(self, actions: dict[str, AgentAction]) -> dict[str, AgentAction]:
         return {
@@ -305,11 +305,15 @@ class MarketEnvironment:
             state.last_shortage = shortage_post
             state.last_price = action.price
             state.last_dump_flag = bool(dump_flag)
+            decision_trace = action.trace
             row_payloads[name] = {
                 "forecast_demand": action.forecast_demand,
                 "forecast_error_abs": abs(action.forecast_demand - snapshot.true_demand),
                 "forecast_error_sq": (action.forecast_demand - snapshot.true_demand) ** 2,
                 "agent_action": f"forecast={action.forecast_demand};price={action.price:.2f};quantity={action.quantity}",
+                "decision_source": decision_trace.source if decision_trace is not None else "external",
+                "decision_reason": decision_trace.summary if decision_trace is not None else "No structured decision trace was provided.",
+                "decision_trace": decision_trace.to_json() if decision_trace is not None else "",
                 "demand_true": snapshot.true_demand,
                 "demand_obs": snapshot.observed_demand,
                 "trend_component": snapshot.trend_component,
@@ -370,6 +374,9 @@ class MarketEnvironment:
                     agent_name=name,
                     agent_role=self.agent_configs[name].role,
                     agent_action=payload["agent_action"],
+                    decision_source=str(payload["decision_source"]),
+                    decision_reason=str(payload["decision_reason"]),
+                    decision_trace=str(payload["decision_trace"]),
                     forecast_demand=int(payload["forecast_demand"]),
                     forecast_error_abs=float(payload["forecast_error_abs"]),
                     forecast_error_sq=float(payload["forecast_error_sq"]),

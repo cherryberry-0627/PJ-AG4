@@ -676,6 +676,9 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `forecast_demand` | 预测需求 $\hat D_{i,t}$ |
 | `forecast_error_abs` | 绝对预测误差 |
 | `forecast_error_sq` | 平方预测误差 |
+| `decision_source` | 决策来源，例如 heuristic、llm 或 llm_fallback |
+| `decision_reason` | 本轮决策链摘要 |
+| `decision_trace` | 结构化 JSON 决策链，包含预测、定价、产量和风控阶段信息 |
 | `price` | 报价 $p_{i,t}$ |
 | `quantity` | 新增节点量 $q_{i,t}$ |
 | `available_supply` | 初始可售供给 $A_{i,t}$ |

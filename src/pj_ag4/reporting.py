@@ -6,7 +6,7 @@ from statistics import mean
 from typing import Sequence
 
 from .config import SimulationConfig
-from .contracts import SettlementRow
+from .contracts import DecisionTrace, SettlementRow
 
 
 def _format_number(value: object) -> str:
@@ -133,6 +133,32 @@ def _event_rows(rows: Sequence[SettlementRow], *, limit: int = 8) -> list[list[o
         )
     events.sort(key=lambda item: (-item[0], item[1][0]))
     return [event for _, event in events[:limit]]
+
+
+def _decision_trace_rows(rows: Sequence[SettlementRow], *, limit: int = 12) -> list[list[object]]:
+    trace_rows: list[list[object]] = []
+    for round_index, agent_rows in sorted(_rows_by_round(rows).items()):
+        for row in sorted(agent_rows, key=lambda item: item.agent_name):
+            trace = DecisionTrace.from_json(row.decision_trace)
+            if trace is None:
+                continue
+            trace_rows.append(
+                [
+                    round_index,
+                    row.agent_name,
+                    trace.source,
+                    trace.forecast_base,
+                    trace.forecast_adjustment,
+                    trace.price_base,
+                    trace.price_adjustment,
+                    trace.quantity_target,
+                    trace.risk_gate_adjustment,
+                    trace.summary,
+                ]
+            )
+            if len(trace_rows) >= limit:
+                return trace_rows
+    return trace_rows
 
 
 def _strategy_commentary(rows: Sequence[SettlementRow]) -> list[str]:
@@ -264,6 +290,24 @@ def write_simulation_report(
         "",
         _markdown_table(
             ["Round", "True Demand", "Sales", "Signals"], _event_rows(rows)
+        ),
+        "",
+        "## Decision Trace Samples",
+        "",
+        _markdown_table(
+            [
+                "Round",
+                "Agent",
+                "Source",
+                "Forecast Base",
+                "Forecast Adj",
+                "Price Base",
+                "Price Adj",
+                "Qty Target",
+                "Risk Gate",
+                "Summary",
+            ],
+            _decision_trace_rows(rows),
         ),
         "",
         "## Conclusion Notes",

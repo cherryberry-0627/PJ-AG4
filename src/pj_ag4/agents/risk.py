@@ -73,6 +73,7 @@ class RiskGateStage:
 
     def __init__(self, config: AgentConfig) -> None:
         self._config = config
+        self.last_trace: dict[str, object] = {}
 
     def review(
         self,
@@ -86,33 +87,48 @@ class RiskGateStage:
         reviewed_quantity = float(draft.quantity)
         reviewed_forecast = draft.forecast_demand
         style = self._config.risk_style
+        adjustments: list[str] = []
 
         # ── 按风格做风格化调整 ──
         if style == "growth_tolerant":
             # 增长容忍：上轮短缺则追加一个 step 的产能
             if observation.own_last_shortage > 0:
                 reviewed_quantity += self._config.quantity_step
+                adjustments.append("growth_tolerant added capacity after shortage")
         elif style == "sla_guard":
             # SLA 守护：价格不低于均价，声誉或短缺有问题时压缩量
-            reviewed_price = max(reviewed_price, observation.market_avg_price)
+            if reviewed_price < observation.market_avg_price:
+                adjustments.append("sla_guard lifted price to market average")
+                reviewed_price = observation.market_avg_price
             if observation.own_last_shortage > 0 or observation.own_reputation < 0.85:
+                adjustments.append("sla_guard reduced quantity under SLA/reputation pressure")
                 reviewed_quantity = min(reviewed_quantity, max(0.0, reviewed_forecast * 0.80))
         elif style == "inventory_guard":
             # 库存守护：量不超过目标减去已有库存，高波动时提价
             target_total = max(reviewed_forecast * 0.75 + 12.0, 20.0)
-            reviewed_quantity = min(reviewed_quantity, max(0.0, target_total - observation.own_inventory))
+            capped_quantity = min(reviewed_quantity, max(0.0, target_total - observation.own_inventory))
+            if capped_quantity < reviewed_quantity:
+                adjustments.append("inventory_guard capped quantity to target inventory")
+            reviewed_quantity = capped_quantity
             if observation.market_volatility > 5.0:
-                reviewed_price = max(reviewed_price, observation.market_avg_price)
+                if reviewed_price < observation.market_avg_price:
+                    adjustments.append("inventory_guard lifted price under volatility")
+                    reviewed_price = observation.market_avg_price
 
         # ── 通用约束：量不超过库存目标 ──
         inv_target = inventory_target_total(self._config, observation, reviewed_forecast, reviewed_price)
-        reviewed_quantity = min(reviewed_quantity, max(0.0, inv_target - observation.own_inventory))
+        capped_quantity = min(reviewed_quantity, max(0.0, inv_target - observation.own_inventory))
+        if capped_quantity < reviewed_quantity:
+            adjustments.append("inventory target capped quantity")
+        reviewed_quantity = capped_quantity
 
         # ── 低声誉兜底：价格不低于 fallback ──
         if fallback is not None and observation.own_reputation < 0.35:
-            reviewed_price = max(reviewed_price, fallback.price)
+            if reviewed_price < fallback.price:
+                adjustments.append("low reputation fallback lifted price")
+                reviewed_price = fallback.price
 
-        return AgentAction(
+        final_action = AgentAction(
             forecast_demand=max(0, int(round(reviewed_forecast))),
             price=round_to_step(
                 reviewed_price, self._config.price_step, self._config.price_floor, self._config.price_ceiling
@@ -121,3 +137,11 @@ class RiskGateStage:
                 reviewed_quantity, self._config.quantity_step, 0, self._config.max_quantity
             ),
         )
+        self.last_trace = {
+            "draft_price": draft.price,
+            "draft_quantity": draft.quantity,
+            "final_price": final_action.price,
+            "final_quantity": final_action.quantity,
+            "adjustment": "; ".join(adjustments) if adjustments else "none",
+        }
+        return final_action

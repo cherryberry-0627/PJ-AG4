@@ -8,7 +8,7 @@ from statistics import mean, pstdev
 from typing import Any, Sequence
 
 from .config import SimulationConfig
-from .contracts import SettlementRow
+from .contracts import DecisionTrace, RoundTrace, SettlementRow
 
 
 AGENT_COLORS = {
@@ -139,14 +139,35 @@ def build_dashboard_payload(
         first_row = round_rows[0]
         total_demand = float(first_row.demand_true)
         total_sales = sum(row.realized_sales for row in round_rows)
+        transfer_volume = float(sum(row.transfer_out for row in round_rows))
+        default_count = int(sum(row.default_flag for row in round_rows))
+        dump_count = int(sum(row.dump_flag for row in round_rows))
+        round_trace = RoundTrace(
+            round_index=round_index,
+            demand_true=total_demand,
+            demand_observed=float(first_row.demand_obs),
+            market_total_sales=total_sales,
+            market_avg_price=float(first_row.market_avg_price),
+            transfer_volume=transfer_volume,
+            default_count=default_count,
+            dump_count=dump_count,
+            summary=(
+                f"R{round_index}: demand {total_demand:.0f}, sales {total_sales:.0f}, "
+                f"transfer {transfer_volume:.1f}, defaults {default_count}, dumps {dump_count}"
+            ),
+        )
         agent_payloads = []
         for row in round_rows:
+            decision_trace = DecisionTrace.from_json(row.decision_trace)
             agent_payloads.append(
                 {
                     "name": row.agent_name,
                     "role": row.agent_role,
                     "color": AGENT_COLORS.get(row.agent_name, {}).get("solid", "#3e8ad6"),
                     "actionText": row.agent_action,
+                    "decisionSource": row.decision_source,
+                    "decisionReason": row.decision_reason,
+                    "decisionTrace": decision_trace.to_public_dict() if decision_trace is not None else None,
                     "price": row.price,
                     "quantity": row.quantity,
                     "forecastDemand": row.forecast_demand,
@@ -189,10 +210,11 @@ def build_dashboard_payload(
                 "trendComponent": float(first_row.trend_component),
                 "seasonComponent": float(first_row.season_component),
                 "noiseComponent": float(first_row.noise_component),
-                "transferVolume": float(sum(row.transfer_out for row in round_rows)),
-                "defaultCount": int(sum(row.default_flag for row in round_rows)),
-                "dumpCount": int(sum(row.dump_flag for row in round_rows)),
+                "transferVolume": transfer_volume,
+                "defaultCount": default_count,
+                "dumpCount": dump_count,
                 "agentSpread": float(max(row.price for row in round_rows) - min(row.price for row in round_rows)),
+                "roundTrace": round_trace.to_public_dict(),
                 "agents": agent_payloads,
             }
         )
@@ -1891,6 +1913,7 @@ def _dashboard_html(
               <p class="log-body">
                 &gt; ${escapeHtml(formatActionText(agent.actionText))}
                 <span class="muted-copy">price ${formatNumber(agent.price, 2)} | qty ${formatNumber(agent.quantity, 0)} | sold ${formatNumber(agent.realizedSales, 1)} | short ${formatNumber(agent.shortage, 1)} | pnl ${formatMoney(agent.profit)}</span>
+                <span class="muted-copy">why: ${escapeHtml(agent.decisionReason || "no structured trace")}</span>
               </p>
               <div class="loading-bar-container">
                 <div class="loading-bar" style="width:${serviceWidth}%;background:${meta.color};box-shadow:0 0 8px ${meta.color};"></div>
@@ -1935,6 +1958,7 @@ def _dashboard_html(
               </div>
 
               <div class="system-message-box">&gt; ${escapeHtml(formatActionText(agent.actionText))}</div>
+              <p class="agent-copy">${escapeHtml(agent.decisionReason || "No structured decision trace was recorded for this action.")}</p>
               <p class="agent-copy">${escapeHtml(meta.persona)}</p>
 
               <div class="agent-params">

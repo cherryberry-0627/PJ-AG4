@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 
 from pj_ag4.config import default_simulation_config
+from pj_ag4.contracts import DecisionTrace
 from pj_ag4.simulation import run_simulation
 
 
@@ -19,6 +20,21 @@ def test_run_simulation_writes_outputs(tmp_path) -> None:
     assert result.dashboard_path.name == "strategy_dashboard.html"
     assert result.report_path is not None
     assert result.report_path.exists()
+
+
+def test_simulation_outputs_decision_trace_in_csv_and_report(tmp_path) -> None:
+    config = default_simulation_config(seed=7, rounds=2, output_dir=tmp_path)
+    result = run_simulation(config, output_dir=tmp_path, generate_figure=False, generate_dashboard=False)
+
+    first_row = result.rows[0]
+    trace = DecisionTrace.from_json(first_row.decision_trace)
+    csv_text = result.csv_path.read_text(encoding="utf-8")
+    report_text = result.report_path.read_text(encoding="utf-8") if result.report_path else ""
+
+    assert trace is not None
+    assert trace.summary
+    assert "decision_trace" in csv_text
+    assert "Decision Trace Samples" in report_text
     assert result.report_path.name == "simulation_report.md"
     report_text = result.report_path.read_text(encoding="utf-8")
     assert "# PJ-AG4 Simulation Report" in report_text
@@ -27,5 +43,5 @@ def test_run_simulation_writes_outputs(tmp_path) -> None:
     with result.csv_path.open(newline="", encoding="utf-8") as handle:
         rows = list(csv.DictReader(handle))
 
-    assert len(rows) == 12
+    assert len(rows) == 6
     assert {"round", "agent_name", "agent_action", "profit"}.issubset(rows[0].keys())
