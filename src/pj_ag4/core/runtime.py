@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any, Mapping
 
 from ..config import SimulationConfig
@@ -37,6 +38,31 @@ class SimulationRuntime:
                 snapshot=snapshot,
                 actions=actions,
             )
+            round_rows = self._record_strategy_updates(agents, round_rows)
             rows.extend(round_rows)
             self._observations.record_round(snapshot=snapshot, actions=actions)
         return rows
+
+    def _record_strategy_updates(
+        self,
+        agents: Mapping[str, Any],
+        round_rows: list[SettlementRow],
+    ) -> list[SettlementRow]:
+        updated_rows: list[SettlementRow] = []
+        for row in round_rows:
+            agent = agents.get(row.agent_name)
+            observe_result = getattr(agent, "observe_result", None)
+            if not callable(observe_result):
+                updated_rows.append(row)
+                continue
+            trace = observe_result(row, round_rows)
+            state = getattr(agent, "strategy_state", None)
+            updated_rows.append(
+                replace(
+                    row,
+                    strategy_state=state.to_json() if state is not None else row.strategy_state,
+                    strategy_update_reason=trace.reason,
+                    strategy_update_trace=trace.to_json(),
+                )
+            )
+        return updated_rows

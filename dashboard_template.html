@@ -2106,6 +2106,7 @@
                 &gt; ${escapeHtml(formatActionText(agent.actionText))}
                 <span class="muted-copy">price ${formatNumber(agent.price, 2)} | qty ${formatNumber(agent.quantity, 0)} | sold ${formatNumber(agent.realizedSales, 1)} | short ${formatNumber(agent.shortage, 1)} | pnl ${formatMoney(agent.profit)}</span>
                 <span class="muted-copy">why: ${escapeHtml(agent.decisionReason || "no structured trace")}</span>
+                ${agent.strategyUpdateReason ? `<span class="muted-copy">learned: ${escapeHtml(agent.strategyUpdateReason)}</span>` : ""}
               </p>
               <div class="loading-bar-container">
                 <div class="loading-bar" style="width:${serviceWidth}%;background:${meta.color};box-shadow:0 0 8px ${meta.color};"></div>
@@ -2150,6 +2151,7 @@
 
               <div class="system-message-box">&gt; ${escapeHtml(formatActionText(agent.actionText))}</div>
               <p class="agent-copy">${escapeHtml(agent.decisionReason || "No structured decision trace was recorded for this action.")}</p>
+              ${agent.strategyUpdateReason ? `<p class="agent-copy">Strategy update: ${escapeHtml(agent.strategyUpdateReason)}</p>` : ""}
               <p class="agent-copy">${escapeHtml(meta.persona)}</p>
 
               <div class="agent-params">
@@ -2157,6 +2159,8 @@
                 <div class="param-line"><span class="param-label">Cum pnl</span><span class="param-value">${formatMoney(agent.cumProfit)}</span></div>
                 <div class="param-line"><span class="param-label">Reputation</span><span class="param-value">${formatPercent(agent.reputation)}</span></div>
                 <div class="param-line"><span class="param-label">Flow</span><span class="param-value">${formatNumber(agent.transferIn, 1)} in / ${formatNumber(agent.transferOut, 1)} out</span></div>
+                ${agent.strategyState ? `<div class="param-line"><span class="param-label">Strategy</span><span class="param-value">P ${formatNumber(agent.strategyState.price_aggressiveness, 2)} / I ${formatNumber(agent.strategyState.inventory_caution, 2)} / R ${formatNumber(agent.strategyState.risk_tolerance, 2)}</span></div>` : ""}
+                ${agent.personalityLabel ? `<div class="param-line"><span class="param-label">Personality</span><span class="param-value">${escapeHtml(agent.personalityLabel)}</span></div>` : ""}
                 <div class="param-line"><span class="param-label">State</span><span class="param-value"><span class="status-tag ${tone.tagClass}">${tone.label}</span></span></div>
               </div>
             </article>

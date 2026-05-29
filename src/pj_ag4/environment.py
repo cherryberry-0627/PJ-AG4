@@ -121,7 +121,14 @@ class MarketEnvironment:
         quantity = int(round(float(action.quantity) / agent_cfg.quantity_step) * agent_cfg.quantity_step)
         quantity = int(clamp(quantity, 0, agent_cfg.max_quantity))
         forecast = max(0, int(round(float(action.forecast_demand))))
-        return AgentAction(forecast_demand=forecast, price=price, quantity=quantity, trace=action.trace)
+        return AgentAction(
+            forecast_demand=forecast,
+            price=price,
+            quantity=quantity,
+            trace=action.trace,
+            strategy_state=action.strategy_state,
+            strategy_update_trace=action.strategy_update_trace,
+        )
 
     def validate_actions(self, actions: dict[str, AgentAction]) -> dict[str, AgentAction]:
         return {
@@ -306,6 +313,7 @@ class MarketEnvironment:
             state.last_price = action.price
             state.last_dump_flag = bool(dump_flag)
             decision_trace = action.trace
+            strategy_update_trace = action.strategy_update_trace
             row_payloads[name] = {
                 "forecast_demand": action.forecast_demand,
                 "forecast_error_abs": abs(action.forecast_demand - snapshot.true_demand),
@@ -314,6 +322,9 @@ class MarketEnvironment:
                 "decision_source": decision_trace.source if decision_trace is not None else "external",
                 "decision_reason": decision_trace.summary if decision_trace is not None else "No structured decision trace was provided.",
                 "decision_trace": decision_trace.to_json() if decision_trace is not None else "",
+                "strategy_state": action.strategy_state.to_json() if action.strategy_state is not None else "",
+                "strategy_update_reason": strategy_update_trace.reason if strategy_update_trace is not None else "",
+                "strategy_update_trace": strategy_update_trace.to_json() if strategy_update_trace is not None else "",
                 "demand_true": snapshot.true_demand,
                 "demand_obs": snapshot.observed_demand,
                 "trend_component": snapshot.trend_component,
@@ -377,6 +388,9 @@ class MarketEnvironment:
                     decision_source=str(payload["decision_source"]),
                     decision_reason=str(payload["decision_reason"]),
                     decision_trace=str(payload["decision_trace"]),
+                    strategy_state=str(payload["strategy_state"]),
+                    strategy_update_reason=str(payload["strategy_update_reason"]),
+                    strategy_update_trace=str(payload["strategy_update_trace"]),
                     forecast_demand=int(payload["forecast_demand"]),
                     forecast_error_abs=float(payload["forecast_error_abs"]),
                     forecast_error_sq=float(payload["forecast_error_sq"]),

@@ -679,6 +679,9 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `decision_source` | 决策来源，例如 heuristic、llm 或 llm_fallback |
 | `decision_reason` | 本轮决策链摘要 |
 | `decision_trace` | 结构化 JSON 决策链，包含预测、定价、产量和风控阶段信息 |
+| `strategy_state` | `llm-adaptive` 模式下的当前策略参数 JSON |
+| `strategy_update_reason` | `llm-adaptive` 结算反馈后的策略调整摘要 |
+| `strategy_update_trace` | 结构化 JSON 策略更新链，包含 personality 约束、raw delta 与 bounded delta |
 | `price` | 报价 $p_{i,t}$ |
 | `quantity` | 新增节点量 $q_{i,t}$ |
 | `available_supply` | 初始可售供给 $A_{i,t}$ |

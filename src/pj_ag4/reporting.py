@@ -6,7 +6,7 @@ from statistics import mean
 from typing import Sequence
 
 from .config import SimulationConfig
-from .contracts import DecisionTrace, SettlementRow
+from .contracts import DecisionTrace, SettlementRow, StrategyUpdateTrace
 
 
 def _format_number(value: object) -> str:
@@ -161,6 +161,32 @@ def _decision_trace_rows(rows: Sequence[SettlementRow], *, limit: int = 12) -> l
     return trace_rows
 
 
+def _adaptive_strategy_trace_rows(rows: Sequence[SettlementRow], *, limit: int = 12) -> list[list[object]]:
+    trace_rows: list[list[object]] = []
+    for round_index, agent_rows in sorted(_rows_by_round(rows).items()):
+        for row in sorted(agent_rows, key=lambda item: item.agent_name):
+            trace = StrategyUpdateTrace.from_json(row.strategy_update_trace)
+            if trace is None:
+                continue
+            trace_rows.append(
+                [
+                    round_index,
+                    row.agent_name,
+                    trace.personality_label,
+                    trace.bounded_delta.get("price_aggressiveness", 0.0),
+                    trace.bounded_delta.get("inventory_caution", 0.0),
+                    trace.bounded_delta.get("risk_tolerance", 0.0),
+                    trace.new_state.price_aggressiveness,
+                    trace.new_state.inventory_caution,
+                    trace.new_state.risk_tolerance,
+                    trace.reason,
+                ]
+            )
+            if len(trace_rows) >= limit:
+                return trace_rows
+    return trace_rows
+
+
 def _strategy_commentary(rows: Sequence[SettlementRow]) -> list[str]:
     if not rows:
         return ["No simulation rows were produced."]
@@ -308,6 +334,24 @@ def write_simulation_report(
                 "Summary",
             ],
             _decision_trace_rows(rows),
+        ),
+        "",
+        "## Adaptive Strategy Trace Samples",
+        "",
+        _markdown_table(
+            [
+                "Round",
+                "Agent",
+                "Personality",
+                "Price Delta",
+                "Inventory Delta",
+                "Risk Delta",
+                "Price State",
+                "Inventory State",
+                "Risk State",
+                "Reason",
+            ],
+            _adaptive_strategy_trace_rows(rows),
         ),
         "",
         "## Conclusion Notes",

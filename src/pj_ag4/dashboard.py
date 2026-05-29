@@ -8,7 +8,7 @@ from statistics import mean, pstdev
 from typing import Any, Sequence
 
 from .config import SimulationConfig
-from .contracts import DecisionTrace, RoundTrace, SettlementRow
+from .contracts import DecisionTrace, RoundTrace, SettlementRow, StrategyState, StrategyUpdateTrace
 
 
 AGENT_COLORS = {
@@ -159,6 +159,8 @@ def build_dashboard_payload(
         agent_payloads = []
         for row in round_rows:
             decision_trace = DecisionTrace.from_json(row.decision_trace)
+            strategy_state = StrategyState.from_json(row.strategy_state)
+            strategy_update_trace = StrategyUpdateTrace.from_json(row.strategy_update_trace)
             agent_payloads.append(
                 {
                     "name": row.agent_name,
@@ -168,6 +170,10 @@ def build_dashboard_payload(
                     "decisionSource": row.decision_source,
                     "decisionReason": row.decision_reason,
                     "decisionTrace": decision_trace.to_public_dict() if decision_trace is not None else None,
+                    "strategyState": strategy_state.to_public_dict() if strategy_state is not None else None,
+                    "strategyUpdateReason": row.strategy_update_reason,
+                    "strategyUpdateTrace": strategy_update_trace.to_public_dict() if strategy_update_trace is not None else None,
+                    "personalityLabel": strategy_update_trace.personality_label if strategy_update_trace is not None else "",
                     "price": row.price,
                     "quantity": row.quantity,
                     "forecastDemand": row.forecast_demand,
@@ -263,6 +269,14 @@ def build_dashboard_payload(
                     "repCooperation": [row.rep_cooperation_end for row in agent_rows],
                     "serviceRate": [row.service_rate for row in agent_rows],
                     "forecastError": [row.forecast_error_abs for row in agent_rows],
+                    "priceAggressiveness": [
+                        (StrategyState.from_json(row.strategy_state).price_aggressiveness if StrategyState.from_json(row.strategy_state) is not None else None)
+                        for row in agent_rows
+                    ],
+                    "inventoryCaution": [
+                        (StrategyState.from_json(row.strategy_state).inventory_caution if StrategyState.from_json(row.strategy_state) is not None else None)
+                        for row in agent_rows
+                    ],
                 },
             }
         )

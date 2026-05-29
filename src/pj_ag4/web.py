@@ -41,7 +41,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", type=int, default=8765, help="Port to bind")
     parser.add_argument("--rounds", type=int, default=30, help="Default number of simulation rounds")
     parser.add_argument("--seed", type=int, default=7, help="Default random seed")
-    parser.add_argument("--agent-mode", choices=("heuristic", "llm"), default="heuristic", help="Default policy backend")
+    parser.add_argument("--agent-mode", choices=("heuristic", "llm", "llm-adaptive"), default="heuristic", help="Default policy backend")
     parser.add_argument("--llm-base-url", type=str, default=None, help="OpenAI-compatible base URL for LLM mode")
     parser.add_argument("--llm-api-key", type=str, default=None, help="API key for LLM mode")
     parser.add_argument("--llm-model", type=str, default=None, help="Model name for LLM mode")
@@ -59,7 +59,7 @@ def _coerce_int(query: dict[str, list[str]], key: str, default: int, *, minimum:
 
 def _coerce_mode(query: dict[str, list[str]], default: str) -> str:
     raw = query.get("agent_mode", [default])[0]
-    return raw if raw in {"heuristic", "llm"} else default
+    return raw if raw in {"heuristic", "llm", "llm-adaptive"} else default
 
 
 def _coerce_float(query: dict[str, list[str]], key: str, default: float, *, minimum: float, maximum: float) -> float:
@@ -82,7 +82,7 @@ def resolve_options(query: dict[str, list[str]], defaults: WebOptions) -> WebOpt
         llm_api_key=query.get("llm_api_key", [defaults.llm_api_key or ""])[0] or defaults.llm_api_key,
         llm_model=query.get("llm_model", [defaults.llm_model or ""])[0] or defaults.llm_model,
     )
-    if options.agent_mode != "llm":
+    if options.agent_mode not in {"llm", "llm-adaptive"}:
         return options
     return WebOptions(
         seed=options.seed,
@@ -249,6 +249,7 @@ def build_dashboard_page(options: WebOptions) -> str:
                     <select id="runtime-agent-mode" class="terminal-select" name="agent_mode">
                       <option value="heuristic"{" selected" if options.agent_mode == "heuristic" else ""}>heuristic</option>
                       <option value="llm"{" selected" if options.agent_mode == "llm" else ""}>llm</option>
+                      <option value="llm-adaptive"{" selected" if options.agent_mode == "llm-adaptive" else ""}>llm-adaptive</option>
                     </select>
                   </label>
                 </div>

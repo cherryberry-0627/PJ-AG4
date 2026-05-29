@@ -10,6 +10,7 @@
 
 from .heuristic import HeuristicAgent, HyperscalerAgent, PremiumCloudAgent, SpotBrokerAgent
 from .llm import LLMPolicyAgent
+from .adaptive import AdaptiveLLMAgent
 from .risk import RiskGateStage
 from .factory import build_agents, ensure_builtin_strategies_registered
 
@@ -19,6 +20,7 @@ __all__ = [
     "PremiumCloudAgent",
     "SpotBrokerAgent",
     "LLMPolicyAgent",
+    "AdaptiveLLMAgent",
     "RiskGateStage",
     "build_agents",
     "ensure_builtin_strategies_registered",

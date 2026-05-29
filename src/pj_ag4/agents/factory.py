@@ -4,11 +4,12 @@
 并通过strategy_registry分发。
 """
 
-from typing import Sequence
+from typing import Any, Sequence
 
 from ..config import AgentConfig, LLMConfig
 from ..providers import build_openai_client
 from ..strategy_registry import build_registered_agents, has_strategy, register_strategy
+from .adaptive import AdaptiveLLMAgent
 from .heuristic import HeuristicAgent, HyperscalerAgent, PremiumCloudAgent, SpotBrokerAgent
 from .llm import LLMPolicyAgent
 
@@ -40,7 +41,7 @@ def _build_heuristic_agents(
 def _build_llm_agents(
     configs: Sequence[AgentConfig],
     llm_config: LLMConfig | None = None,
-) -> dict[str, HeuristicAgent]:
+) -> dict[str, Any]:
     """为所有配置创建LLM agent字典，每个agent内嵌一个heuristic fallback。"""
     if llm_config is None:
         raise ValueError("llm_config is required when mode='llm'")
@@ -59,16 +60,39 @@ def _build_llm_agents(
     return agents
 
 
+def _build_llm_adaptive_agents(
+    configs: Sequence[AgentConfig],
+    llm_config: LLMConfig | None = None,
+) -> dict[str, Any]:
+    """为所有配置创建LLM自适应策略agent，每个agent使用heuristic作为安全执行基线。"""
+    if llm_config is None:
+        raise ValueError("llm_config is required when mode='llm-adaptive'")
+    if not llm_config.api_key:
+        raise ValueError("llm_config.api_key is required when mode='llm-adaptive'")
+    client = build_openai_client(llm_config)
+    agents: dict[str, Any] = {}
+    for cfg in configs:
+        fallback_agent = _build_heuristic_agent(cfg)
+        agents[cfg.name] = AdaptiveLLMAgent(
+            cfg,
+            llm_config=llm_config,
+            fallback_agent=fallback_agent,
+            client=client,
+        )
+    return agents
+
+
 def ensure_builtin_strategies_registered() -> None:
     """
     确保 "heuristic" 和 "llm" 两个内置策略已注册到全局 registry。
     注册操作是幂等的——多次调用不会重复注册。
     """
     global _BUILTINS_REGISTERED
-    if _BUILTINS_REGISTERED and has_strategy("heuristic") and has_strategy("llm"):
+    if _BUILTINS_REGISTERED and has_strategy("heuristic") and has_strategy("llm") and has_strategy("llm-adaptive"):
         return
     register_strategy("heuristic", title="Heuristic", builder=_build_heuristic_agents, replace=True)
     register_strategy("llm", title="LLM", builder=_build_llm_agents, replace=True)
+    register_strategy("llm-adaptive", title="LLM Adaptive", builder=_build_llm_adaptive_agents, replace=True)
     _BUILTINS_REGISTERED = True
 
 
@@ -77,7 +101,7 @@ def build_agents(
     *,
     mode: str = "heuristic",
     llm_config: LLMConfig | None = None,
-) -> dict[str, HeuristicAgent]:
+) -> dict[str, Any]:
     """
     公共入口——构建指定模式下所有agent实例。
     参数:
