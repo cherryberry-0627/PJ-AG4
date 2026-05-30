@@ -44,6 +44,7 @@ class BenchmarkPlan:
     strategies: tuple[StrategyProfile, ...]
     seeds: tuple[int, ...]
     rounds: int = 10
+    scenarios: tuple[str, ...] = ("baseline",)
     output_root: Path = REPO_ROOT / "quant" / "outputs" / "benchmarks"
     generate_figure: bool = False
     llm_base_url: str | None = None
@@ -73,6 +74,7 @@ class RunArtifact:
     kind: str
     seed: int
     rounds: int
+    scenario: str
     output_dir: Path
     csv_path: Path
     figure_path: Path | None
@@ -91,6 +93,7 @@ def build_simulation_config(
     llm_api_key: str | None = None,
     llm_model: str | None = None,
     llm_timeout_seconds: float = 30.0,
+    scenario: str = "baseline",
 ) -> SimulationConfig:
     config = default_simulation_config(
         seed=seed,
@@ -100,6 +103,7 @@ def build_simulation_config(
         llm_base_url=llm_base_url,
         llm_api_key=llm_api_key,
         llm_model=llm_model,
+        scenario=scenario,
     )
     if config.llm is not None and config.llm.timeout_seconds != llm_timeout_seconds:
         config = replace(config, llm=replace(config.llm, timeout_seconds=llm_timeout_seconds))
@@ -117,6 +121,7 @@ def build_strategy_config(
     llm_model: str | None = None,
     llm_timeout_seconds: float = 30.0,
     market_overrides: dict[str, float] | None = None,
+    scenario: str = "baseline",
 ) -> SimulationConfig:
     ensure_quant_strategies_registered()
     config = build_simulation_config(
@@ -128,6 +133,7 @@ def build_strategy_config(
         llm_api_key=llm_api_key,
         llm_model=llm_model,
         llm_timeout_seconds=llm_timeout_seconds,
+        scenario=scenario,
     )
     if market_overrides:
         config = replace(config, market=replace(config.market, **market_overrides))
@@ -146,10 +152,11 @@ def run_profile(
     llm_model: str | None = None,
     llm_timeout_seconds: float = 30.0,
     market_overrides: dict[str, float] | None = None,
+    scenario: str = "baseline",
 ) -> RunArtifact:
     ensure_quant_strategies_registered()
     base_dir = Path(output_root or (REPO_ROOT / "quant" / "outputs"))
-    output_dir = base_dir / profile.name / f"seed_{seed}"
+    output_dir = base_dir / scenario / profile.name / f"seed_{seed}"
     config = build_strategy_config(
         strategy_name=profile.kind,
         seed=seed,
@@ -160,6 +167,7 @@ def run_profile(
         llm_model=llm_model,
         llm_timeout_seconds=llm_timeout_seconds,
         market_overrides=market_overrides,
+        scenario=scenario,
     )
     result = run_simulation(
         config,
@@ -173,6 +181,7 @@ def run_profile(
         kind=profile.kind,
         seed=seed,
         rounds=rounds,
+        scenario=scenario,
         output_dir=output_dir,
         csv_path=result.csv_path,
         figure_path=result.figure_path,
@@ -184,20 +193,22 @@ def run_benchmark_suite(plan: BenchmarkPlan) -> list[RunArtifact]:
     ensure_quant_strategies_registered()
     artifacts: list[RunArtifact] = []
     for profile in plan.strategies:
-        for seed in plan.seeds:
-            artifacts.append(
-                run_profile(
-                    profile,
-                    seed=seed,
-                    rounds=plan.rounds,
-                    output_root=plan.output_root,
-                    generate_figure=plan.generate_figure,
-                    llm_base_url=plan.llm_base_url,
-                    llm_api_key=plan.llm_api_key,
-                    llm_model=plan.llm_model,
-                    llm_timeout_seconds=plan.llm_timeout_seconds,
+        for scenario in plan.scenarios:
+            for seed in plan.seeds:
+                artifacts.append(
+                    run_profile(
+                        profile,
+                        seed=seed,
+                        rounds=plan.rounds,
+                        output_root=plan.output_root,
+                        generate_figure=plan.generate_figure,
+                        llm_base_url=plan.llm_base_url,
+                        llm_api_key=plan.llm_api_key,
+                        llm_model=plan.llm_model,
+                        llm_timeout_seconds=plan.llm_timeout_seconds,
+                        scenario=scenario,
+                    )
                 )
-            )
     return artifacts
 
 
@@ -216,6 +227,7 @@ def run_sensitivity_scan(plan: SensitivityPlan) -> list[RunArtifact]:
                 llm_api_key=plan.llm_api_key,
                 llm_model=plan.llm_model,
                 llm_timeout_seconds=plan.llm_timeout_seconds,
+                scenario="baseline",
             )
             if plan.parameter == "reputation_weight":
                 config = replace(config, market=replace(config.market, reputation_weight=value))
@@ -238,6 +250,7 @@ def run_sensitivity_scan(plan: SensitivityPlan) -> list[RunArtifact]:
                     kind=plan.strategy.kind,
                     seed=seed,
                     rounds=plan.rounds,
+                    scenario="baseline",
                     output_dir=output_dir,
                     csv_path=result.csv_path,
                     figure_path=result.figure_path,

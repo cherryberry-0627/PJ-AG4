@@ -79,6 +79,8 @@ def _round_summary_rows(rows: Sequence[SettlementRow]) -> list[list[object]]:
                 sum(row.profit for row in agent_rows),
                 sum(row.shortage_post_transfer for row in agent_rows),
                 sum(row.transfer_in for row in agent_rows),
+                sum(row.reallocated_in for row in agent_rows),
+                sum(row.backlog_end for row in agent_rows),
             ]
         )
     return round_rows
@@ -207,6 +209,8 @@ def _strategy_commentary(rows: Sequence[SettlementRow]) -> list[str]:
         market_total_sales / market_total_demand if market_total_demand else 0.0
     )
     total_transfer = sum(row.transfer_in for row in rows)
+    total_reallocated = sum(row.reallocated_in for row in rows)
+    final_backlog = sum(agent_rows[-1].backlog_end for agent_rows in grouped.values())
     total_dump = sum(row.dump_flag for row in rows)
     total_default = sum(row.default_flag for row in rows)
     return [
@@ -214,7 +218,24 @@ def _strategy_commentary(rows: Sequence[SettlementRow]) -> list[str]:
         f"**Service leader:** `{service_leader_name}` posts the strongest average service rate at `{mean(row.service_rate for row in service_leader_rows):.2%}`.",
         f"**Pricing posture:** `{price_leader_name}` maintains the highest average price at `{mean(row.price for row in price_leader_rows):.2f}`.",
         f"**Market fulfillment:** the run sells `{market_total_sales:.2f}` units against `{market_total_demand:.2f}` true demand for a fulfillment ratio of `{fulfillment:.2%}`.",
-        f"**Operational stress:** peer transfers total `{total_transfer:.2f}` units, with `{int(total_dump)}` dump flags and `{int(total_default)}` default flags.",
+        f"**Operational stress:** peer transfers total `{total_transfer:.2f}` units, customer reallocation totals `{total_reallocated:.2f}`, final SLA backlog is `{final_backlog:.2f}`, with `{int(total_dump)}` dump flags and `{int(total_default)}` default flags.",
+    ]
+
+
+def _finding_lines(rows: Sequence[SettlementRow], config: SimulationConfig) -> list[str]:
+    if not rows:
+        return ["- No findings available."]
+    grouped = _group_by_agent(rows)
+    final_rows = {name: agent_rows[-1] for name, agent_rows in grouped.items()}
+    winner, winner_row = max(final_rows.items(), key=lambda item: item[1].cum_profit)
+    total_reallocated = sum(row.reallocated_in for row in rows)
+    total_transfer = sum(row.transfer_in for row in rows)
+    final_backlog = sum(row.backlog_end for row in final_rows.values())
+    avg_forecast_error = mean(row.forecast_error_abs for row in rows)
+    return [
+        f"**Finding 1: Reputation-weighted SLA posture can beat pure price cutting.** In scenario `{config.scenario}`, `{winner}` ends first with cumulative profit `{winner_row.cum_profit:.2f}` and reputation `{winner_row.reputation_end:.2%}`.",
+        f"**Finding 2: Capacity pressure is now visible as customer migration and backlog.** Two-stage allocation reallocates `{total_reallocated:.2f}` units and leaves final SLA backlog `{final_backlog:.2f}`.",
+        f"**Finding 3: Peer transfer is a stress valve, not the whole market.** Transfer volume totals `{total_transfer:.2f}` units while average forecast error is `{avg_forecast_error:.2f}`, linking prediction quality to shortage/default risk.",
     ]
 
 
@@ -240,10 +261,11 @@ def write_simulation_report(
         "## Run Parameters",
         "",
         _markdown_table(
-            ["Seed", "Rounds", "Agent Mode", "Agents", "Demand Window"],
+            ["Seed", "Scenario", "Rounds", "Agent Mode", "Agents", "Demand Window"],
             [
                 [
                     config.seed,
+                    config.scenario,
                     len(rounds),
                     config.agent_mode,
                     len(config.agents),
@@ -308,9 +330,15 @@ def write_simulation_report(
                 "Profit",
                 "Shortage",
                 "Transfers",
+                "Reallocated",
+                "Backlog",
             ],
             _round_summary_rows(rows),
         ),
+        "",
+        "## Findings",
+        "",
+        *[f"- {line}" for line in _finding_lines(rows, config)],
         "",
         "## Key Events",
         "",

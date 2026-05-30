@@ -28,6 +28,18 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _json_object(value: str) -> dict[str, float]:
+    if not value:
+        return {}
+    try:
+        payload = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {str(key): float(item) for key, item in payload.items()}
+
+
 def _agent_role_label(role: str) -> str:
     labels = {
         "hyperscaler": "Scale-dominant",
@@ -66,6 +78,7 @@ def _build_events(rounds_payload: Sequence[dict[str, Any]]) -> list[dict[str, An
             + float(round_payload["defaultCount"]) * 16.0
             + float(round_payload["dumpCount"]) * 8.0
             + float(round_payload["transferVolume"]) * 0.6
+            + float(round_payload.get("backlogTotal", 0.0)) * 0.5
         )
         tags: list[str] = []
         if abs(float(round_payload["shockComponent"])) >= 0.5:
@@ -76,6 +89,8 @@ def _build_events(rounds_payload: Sequence[dict[str, Any]]) -> list[dict[str, An
             tags.append("dump")
         if float(round_payload["transferVolume"]) > 0:
             tags.append("transfer")
+        if float(round_payload.get("backlogTotal", 0.0)) > 0:
+            tags.append("backlog")
         if not tags:
             continue
         if int(round_payload["defaultCount"]) > 0:
@@ -90,7 +105,8 @@ def _build_events(rounds_payload: Sequence[dict[str, Any]]) -> list[dict[str, An
             f"Shock {float(round_payload['shockComponent']):+.1f}, "
             f"defaults {int(round_payload['defaultCount'])}, "
             f"dumps {int(round_payload['dumpCount'])}, "
-            f"transfer {float(round_payload['transferVolume']):.1f}"
+            f"transfer {float(round_payload['transferVolume']):.1f}, "
+            f"backlog {float(round_payload.get('backlogTotal', 0.0)):.1f}"
         )
         events.append(
             {
@@ -142,6 +158,7 @@ def build_dashboard_payload(
         transfer_volume = float(sum(row.transfer_out for row in round_rows))
         default_count = int(sum(row.default_flag for row in round_rows))
         dump_count = int(sum(row.dump_flag for row in round_rows))
+        backlog_total = float(sum(row.backlog_end for row in round_rows))
         round_trace = RoundTrace(
             round_index=round_index,
             demand_true=total_demand,
@@ -151,9 +168,10 @@ def build_dashboard_payload(
             transfer_volume=transfer_volume,
             default_count=default_count,
             dump_count=dump_count,
+            backlog_total=backlog_total,
             summary=(
                 f"R{round_index}: demand {total_demand:.0f}, sales {total_sales:.0f}, "
-                f"transfer {transfer_volume:.1f}, defaults {default_count}, dumps {dump_count}"
+                f"transfer {transfer_volume:.1f}, backlog {backlog_total:.1f}, defaults {default_count}, dumps {dump_count}"
             ),
         )
         agent_payloads = []
@@ -199,6 +217,16 @@ def build_dashboard_payload(
                     "transferAccepts": row.transfer_accepts,
                     "coopProbability": row.coop_probability,
                     "coopAcceptRate": row.coop_accept_rate,
+                    "segmentDemand": _json_object(row.segment_demand),
+                    "segmentAllocations": _json_object(row.segment_allocations),
+                    "reallocatedIn": row.reallocated_in,
+                    "reallocatedOut": row.reallocated_out,
+                    "backlogStart": row.backlog_start,
+                    "newContractDemand": row.new_contract_demand,
+                    "deliveredBacklog": row.delivered_backlog,
+                    "backlogEnd": row.backlog_end,
+                    "lateUnits": row.late_units,
+                    "slaQueuePenalty": row.sla_queue_penalty,
                     "dumpFlag": row.dump_flag,
                     "defaultFlag": row.default_flag,
                 }
@@ -219,6 +247,8 @@ def build_dashboard_payload(
                 "transferVolume": transfer_volume,
                 "defaultCount": default_count,
                 "dumpCount": dump_count,
+                "backlogTotal": backlog_total,
+                "reallocatedVolume": float(sum(row.reallocated_in for row in round_rows)),
                 "agentSpread": float(max(row.price for row in round_rows) - min(row.price for row in round_rows)),
                 "roundTrace": round_trace.to_public_dict(),
                 "agents": agent_payloads,
@@ -290,14 +320,22 @@ def build_dashboard_payload(
     total_demand = sum(_round_value(rows_by_round[idx], "demand_true") for idx in ordered_rounds)
     total_sales = sum(sum(row.realized_sales for row in rows_by_round[idx]) for idx in ordered_rounds)
     total_profit = sum(row.profit for row in rows)
+    final_by_agent = {name: sorted(rows_by_agent[name], key=lambda item: item.round)[-1] for name in ordered_agents}
+    winner_name = max(final_by_agent, key=lambda name: final_by_agent[name].cum_profit)
 
     overview = {
+        "winner": winner_name,
         "totalDemand": total_demand,
         "totalSales": total_sales,
         "fulfillmentRatio": _safe_ratio(total_sales, total_demand),
         "avgPrice": mean(price_series) if price_series else 0.0,
         "totalProfit": total_profit,
         "transferVolume": sum(transfer_series),
+        "reallocatedVolume": sum(item["reallocatedVolume"] for item in rounds_payload),
+        "backlogEnd": sum(row.backlog_end for row in final_by_agent.values()),
+        "lateUnits": sum(row.late_units for row in rows),
+        "defaultEvents": sum(row.default_flag for row in rows),
+        "dumpEvents": sum(row.dump_flag for row in rows),
         "shockRounds": sum(1 for value in shock_series if abs(value) >= 0.5),
         "avgDemandGap": mean(abs(item["demandGap"]) for item in rounds_payload),
         "rounds": rounds_count,
@@ -308,6 +346,7 @@ def build_dashboard_payload(
         "meta": {
             "seed": rows[0].seed,
             "strategy": resolved_strategy,
+            "scenario": config.scenario if config is not None else "baseline",
             "rounds": rounds_count,
             "agents": ordered_agents,
             "title": "PJ-AG4 Strategy Sandbox",

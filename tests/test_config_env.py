@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from pj_ag4.config import default_simulation_config
 
 
@@ -60,3 +62,16 @@ def test_explicit_arguments_override_dotenv(monkeypatch, tmp_path: Path) -> None
     assert config.llm.api_key == "cli-key"
     assert config.llm.base_url == "http://127.0.0.1:7000/v1"
     assert config.llm.model == "cli-model"
+
+
+def test_scenario_profiles_can_be_selected() -> None:
+    config = default_simulation_config(scenario="supply_shock")
+
+    assert config.scenario == "supply_shock"
+    assert config.market.shock_round == 8
+    assert config.market.transfer_enabled is True
+
+
+def test_unknown_scenario_raises_clear_error() -> None:
+    with pytest.raises(ValueError, match="unknown scenario"):
+        default_simulation_config(scenario="moon_market")

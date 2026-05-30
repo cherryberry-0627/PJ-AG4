@@ -21,6 +21,10 @@ def test_build_dashboard_payload_contains_market_and_agent_sections(tmp_path) ->
     assert "roundTrace" in payload["roundsData"][0]
     assert "decisionTrace" in payload["roundsData"][0]["agents"][0]
     assert payload["roundsData"][0]["agents"][0]["decisionReason"]
+    assert "segmentAllocations" in payload["roundsData"][0]["agents"][0]
+    assert "backlogEnd" in payload["roundsData"][0]["agents"][0]
+    assert "reallocatedVolume" in payload["roundsData"][0]
+    assert "backlogEnd" in payload["overview"]
 
 
 def test_create_dashboard_writes_html_artifact(tmp_path) -> None:

@@ -61,6 +61,13 @@ python3 -m pip install -e '.[dev]' --no-build-isolation
 pj-ag4-run --rounds 30 --output-dir outputs/default_run
 ```
 
+Run the final presentation scenario with the segmented market, reallocation, transfer, SLA backlog, and adaptive trace fields:
+
+```bash
+pj-ag4-run --scenario supply_shock --rounds 30 --output-dir outputs/final
+pj-ag4-scenarios --rounds 30 --seeds 7 11 23 --output-root outputs/final/scenario_sweep
+```
+
 You can also run the bundled script directly:
 
 ```bash
@@ -171,6 +178,7 @@ After the service starts, open:
 
 - `http://127.0.0.1:8766/` for the streaming dashboard UI
 - `http://127.0.0.1:8766/?agent_mode=llm` to boot directly into LLM mode
+- `http://127.0.0.1:8766/?scenario=supply_shock` to boot the final demo scenario
 - `http://127.0.0.1:8766/api/payload` for a one-shot JSON payload
 - `http://127.0.0.1:8766/api/stream` for the event stream API
 

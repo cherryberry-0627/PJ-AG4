@@ -1009,9 +1009,9 @@
         <div class="header-grid">
           <div class="title-block">
             <div class="page-kicker">PJ-AG4 / Strategy Dashboard</div>
-            <h1 class="slide-title glitch-effect" data-text="GPU market sandbox">GPU market sandbox<span class="cursor"></span></h1>
+            <h1 class="slide-title glitch-effect" data-text="GPU adaptive market">GPU adaptive market<span class="cursor"></span></h1>
           </div>
-          <p class="slide-subtitle">Market decisions, trend reading, event diagnostics, and sandbox controls on one terminal board.</p>
+          <p class="slide-subtitle">Executive view for the GPU market sandbox: customer migration, SLA backlog, peer transfer, reputation feedback, and LLM-guided agent adaptation.</p>
         </div>
       </header>
 
@@ -1032,16 +1032,16 @@
           </div>
         </article>
 
-        <article class="comparison-card metric-card stable-mode" data-tag="[AVG_PRICE]">
-          <span class="step-tag">Mean clearing price</span>
-          <strong class="metric-value" id="kpi-price">0.00</strong>
-          <p class="metric-copy">Use it to read premium harvest versus share-grab posture.</p>
+        <article class="comparison-card metric-card stable-mode" data-tag="[WINNER]">
+          <span class="step-tag">Current winner</span>
+          <strong class="metric-value" id="kpi-winner">--</strong>
+          <p class="metric-copy">Final cumulative payoff leader under this scenario.</p>
         </article>
 
         <article class="comparison-card metric-card stable-mode" data-tag="[TRANSFER_VOL]">
-          <span class="step-tag">Emergency volume shifted</span>
+          <span class="step-tag">Transfer / backlog pressure</span>
           <strong class="metric-value" id="kpi-transfer">0.0</strong>
-          <p class="metric-copy">Cross-agent support activated during service pressure.</p>
+          <p class="metric-copy" id="kpi-stress-copy">Cross-agent support and SLA queue pressure.</p>
         </article>
       </section>
 
@@ -1092,6 +1092,7 @@
               <div class="param-line"><span class="param-label">Demand gap</span><span class="param-value" id="detail-gap">0.0</span></div>
               <div class="param-line"><span class="param-label">Shock</span><span class="param-value" id="detail-shock">0.0</span></div>
               <div class="param-line"><span class="param-label">Transfer</span><span class="param-value" id="detail-transfer">0.0</span></div>
+              <div class="param-line"><span class="param-label">Backlog</span><span class="param-value" id="detail-backlog">0.0</span></div>
             </div>
 
             <div class="progress-block">
@@ -1257,6 +1258,7 @@
       runtimeSeed: document.getElementById("runtime-seed"),
       runtimeRounds: document.getElementById("runtime-rounds"),
       runtimeAgentMode: document.getElementById("runtime-agent-mode"),
+      runtimeScenario: document.getElementById("runtime-scenario"),
       runtimeRun: document.getElementById("runtime-run"),
       runtimeJsonLink: document.getElementById("runtime-json-link"),
       runtimeStatus: document.getElementById("runtime-status"),
@@ -1275,6 +1277,7 @@
         seed: controls.runtimeSeed ? controls.runtimeSeed.value : String(data.meta.seed),
         rounds: controls.runtimeRounds ? controls.runtimeRounds.value : String(data.meta.rounds),
         agent_mode: controls.runtimeAgentMode ? controls.runtimeAgentMode.value : String(data.meta.strategy),
+        scenario: controls.runtimeScenario ? controls.runtimeScenario.value : String(data.meta.scenario || "baseline"),
         shock_scale: Number(initialControls.shockScale || 0),
         demand_bias: Number(initialControls.demandBias || 0),
       },
@@ -1355,6 +1358,7 @@
         seed: String(options.seed),
         rounds: String(options.rounds),
         agent_mode: String(options.agent_mode),
+        scenario: String(options.scenario || data.meta.scenario || "baseline"),
         shock_scale: String(options.shock_scale),
         demand_bias: String(options.demand_bias),
         ...extra,
@@ -1369,6 +1373,7 @@
         seed: controls.runtimeSeed.value,
         rounds: controls.runtimeRounds.value,
         agent_mode: controls.runtimeAgentMode.value,
+        scenario: controls.runtimeScenario ? controls.runtimeScenario.value : String(data.meta.scenario || "baseline"),
         shock_scale: state.shockScale,
         demand_bias: state.demandBias,
       };
@@ -1812,15 +1817,16 @@
     }
 
     function setOverview() {
-      document.getElementById("hero-strategy").textContent = data.meta.strategy;
+      document.getElementById("hero-strategy").textContent = data.meta.strategy + " / " + (data.meta.scenario || "baseline");
       document.getElementById("hero-seed").textContent = data.meta.seed;
       document.getElementById("hero-rounds").textContent = runtime.active ? runtime.targetRounds : data.meta.rounds;
       document.getElementById("hero-agents").textContent = data.meta.agents.length;
       document.getElementById("kpi-profit").textContent = formatMoney(data.overview.totalProfit);
       document.getElementById("kpi-fulfillment").textContent = formatPercent(data.overview.fulfillmentRatio);
       document.getElementById("kpi-fulfillment-bar").style.width = Math.max(2, data.overview.fulfillmentRatio * 100) + "%";
-      document.getElementById("kpi-price").textContent = formatNumber(data.overview.avgPrice, 2);
+      document.getElementById("kpi-winner").textContent = data.overview.winner || "--";
       document.getElementById("kpi-transfer").textContent = formatNumber(data.overview.transferVolume, 1);
+      document.getElementById("kpi-stress-copy").textContent = "Backlog " + formatNumber(data.overview.backlogEnd || 0, 1) + " | defaults " + formatNumber(data.overview.defaultEvents || 0, 0) + " | reallocated " + formatNumber(data.overview.reallocatedVolume || 0, 1);
     }
 
     function buildAgentOptions() {
@@ -1923,7 +1929,7 @@
           }
         });
 
-        [controls.runtimeSeed, controls.runtimeRounds, controls.runtimeAgentMode].forEach((node) => {
+        [controls.runtimeSeed, controls.runtimeRounds, controls.runtimeAgentMode, controls.runtimeScenario].forEach((node) => {
           if (!node) {
             return;
           }
@@ -2074,6 +2080,7 @@
       document.getElementById("detail-gap").textContent = formatNumber(round.demandGap, 1);
       document.getElementById("detail-shock").textContent = formatNumber(round.shockComponent, 1);
       document.getElementById("detail-transfer").textContent = formatNumber(round.transferVolume, 1);
+      document.getElementById("detail-backlog").textContent = formatNumber(round.backlogTotal || 0, 1);
       document.getElementById("detail-fulfillment").textContent = formatPercent(round.fulfillmentRatio);
       document.getElementById("detail-fulfillment-bar").style.width = Math.max(2, round.fulfillmentRatio * 100) + "%";
 
@@ -2159,6 +2166,8 @@
                 <div class="param-line"><span class="param-label">Cum pnl</span><span class="param-value">${formatMoney(agent.cumProfit)}</span></div>
                 <div class="param-line"><span class="param-label">Reputation</span><span class="param-value">${formatPercent(agent.reputation)}</span></div>
                 <div class="param-line"><span class="param-label">Flow</span><span class="param-value">${formatNumber(agent.transferIn, 1)} in / ${formatNumber(agent.transferOut, 1)} out</span></div>
+                <div class="param-line"><span class="param-label">Segments</span><span class="param-value">train ${formatNumber((agent.segmentAllocations || {}).training_burst || 0, 0)} / ent ${formatNumber((agent.segmentAllocations || {}).enterprise_sla || 0, 0)} / spot ${formatNumber((agent.segmentAllocations || {}).spot_workload || 0, 0)}</span></div>
+                <div class="param-line"><span class="param-label">SLA queue</span><span class="param-value">backlog ${formatNumber(agent.backlogEnd || 0, 1)} / late ${formatNumber(agent.lateUnits || 0, 1)}</span></div>
                 ${agent.strategyState ? `<div class="param-line"><span class="param-label">Strategy</span><span class="param-value">P ${formatNumber(agent.strategyState.price_aggressiveness, 2)} / I ${formatNumber(agent.strategyState.inventory_caution, 2)} / R ${formatNumber(agent.strategyState.risk_tolerance, 2)}</span></div>` : ""}
                 ${agent.personalityLabel ? `<div class="param-line"><span class="param-label">Personality</span><span class="param-value">${escapeHtml(agent.personalityLabel)}</span></div>` : ""}
                 <div class="param-line"><span class="param-label">State</span><span class="param-value"><span class="status-tag ${tone.tagClass}">${tone.label}</span></span></div>

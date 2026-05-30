@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 
+import pytest
+
 from pj_ag4.config import default_simulation_config
 from pj_ag4.contracts import DecisionTrace
 from pj_ag4.simulation import run_simulation
@@ -45,3 +47,13 @@ def test_simulation_outputs_decision_trace_in_csv_and_report(tmp_path) -> None:
 
     assert len(rows) == 6
     assert {"round", "agent_name", "agent_action", "profit"}.issubset(rows[0].keys())
+
+
+def test_supply_shock_scenario_exposes_stress_mechanics(tmp_path) -> None:
+    config = default_simulation_config(seed=7, rounds=12, output_dir=tmp_path, scenario="supply_shock")
+    result = run_simulation(config, output_dir=tmp_path, generate_figure=False, generate_dashboard=False)
+
+    assert sum(row.transfer_out for row in result.rows) > 0
+    assert sum(row.default_flag for row in result.rows) > 0
+    assert sum(row.backlog_end for row in result.rows[-3:]) > 0
+    assert sum(row.reallocated_in for row in result.rows) == pytest.approx(sum(row.reallocated_out for row in result.rows))

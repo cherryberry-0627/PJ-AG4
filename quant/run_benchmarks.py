@@ -100,6 +100,7 @@ def run_benchmark_suite(
     strategies: Sequence[str] | None = None,
     seeds: Sequence[int] = (7, 11, 23),
     rounds: int = 10,
+    scenarios: Sequence[str] = ("baseline",),
     output_root: Path | str = Path("quant/outputs/benchmarks"),
     llm_base_url: str | None = None,
     llm_api_key: str | None = None,
@@ -112,6 +113,7 @@ def run_benchmark_suite(
         strategies=_resolve_profiles(strategies),
         seeds=tuple(seeds),
         rounds=rounds,
+        scenarios=tuple(scenarios),
         output_root=output_root / "runs",
         generate_figure=generate_run_figures,
         llm_base_url=llm_base_url,
@@ -152,6 +154,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rounds", type=int, default=10)
     parser.add_argument("--seeds", type=int, nargs="+", default=[7, 11, 23])
     parser.add_argument(
+        "--scenarios",
+        nargs="+",
+        default=["baseline"],
+        choices=["baseline", "price_war", "supply_shock", "high_volatility", "no_reputation", "no_transfer"],
+    )
+    parser.add_argument(
         "--strategies",
         nargs="+",
         default=["heuristic", "rule_price_cutter", "rule_inventory_guard"],
@@ -171,6 +179,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         strategies=args.strategies,
         seeds=args.seeds,
         rounds=args.rounds,
+        scenarios=args.scenarios,
         output_root=args.output_root,
         llm_base_url=args.llm_base_url,
         llm_api_key=args.llm_api_key,

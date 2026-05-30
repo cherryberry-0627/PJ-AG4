@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import random
 from statistics import median
 
@@ -29,6 +30,7 @@ class AgentState:
     last_shortage: float = 0.0
     last_price: float = 0.0
     last_dump_flag: bool = False
+    backlog: float = 0.0
 
     @property
     def reputation(self) -> float:
@@ -159,15 +161,21 @@ class MarketEnvironment:
         transfer_accepts: dict[str, int] = {name: 0 for name in ordered_names}
         transfer_attempts: dict[str, int] = {name: 0 for name in ordered_names}
         transfer_probability_sum: dict[str, float] = {name: 0.0 for name in ordered_names}
+        segment_demand = {
+            segment.name: snapshot.true_demand * segment.demand_fraction
+            for segment in self.market.customer_segments
+        }
+        segment_allocations: dict[str, dict[str, float]] = {
+            name: {segment.name: 0.0 for segment in self.market.customer_segments}
+            for name in ordered_names
+        }
+        reallocated_in: dict[str, float] = {name: 0.0 for name in ordered_names}
+        reallocated_out: dict[str, float] = {name: 0.0 for name in ordered_names}
 
         reputation_start = {name: self.reputation_for(name) for name in ordered_names}
         prices = [actions[name].price for name in ordered_names]
-        price_softmax = stable_softmax([
-            self.agent_configs[name].brand_strength + self.market.reputation_weight * reputation_start[name] - self.market.price_weight * actions[name].price
-            for name in ordered_names
-        ])
 
-        for idx, name in enumerate(ordered_names):
+        for name in ordered_names:
             agent_cfg = self.agent_configs[name]
             action = actions[name]
             state = self.states[name]
@@ -177,8 +185,67 @@ class MarketEnvironment:
                 + self.market.reputation_weight * reputation_start[name]
                 - self.market.price_weight * action.price
             )
-            demand_share[name] = price_softmax[idx]
-            allocated_demand[name] = snapshot.true_demand * demand_share[name]
+
+        for segment in self.market.customer_segments:
+            segment_scores = []
+            for name in ordered_names:
+                agent_cfg = self.agent_configs[name]
+                state = self.states[name]
+                role_bonus = segment.role_bias.get(agent_cfg.role, 0.0)
+                segment_scores.append(
+                    segment.brand_weight * agent_cfg.brand_strength
+                    + segment.reputation_weight * reputation_start[name]
+                    + segment.sla_weight * state.rep_delivery
+                    + role_bonus
+                    - segment.price_weight * actions[name].price
+                )
+            segment_shares = stable_softmax(segment_scores)
+            for idx, name in enumerate(ordered_names):
+                segment_allocations[name][segment.name] += segment_demand[segment.name] * segment_shares[idx]
+
+        for name in ordered_names:
+            allocated_demand[name] = sum(segment_allocations[name].values())
+
+        if self.market.reallocation_enabled:
+            initial_sales = {
+                name: min(supply_start[name], allocated_demand[name])
+                for name in ordered_names
+            }
+            surplus_after_initial = {
+                name: max(0.0, supply_start[name] - initial_sales[name])
+                for name in ordered_names
+            }
+            unmet_after_initial = {
+                name: max(0.0, allocated_demand[name] - supply_start[name])
+                for name in ordered_names
+            }
+            for shortage_name in sorted(ordered_names, key=lambda item: unmet_after_initial[item], reverse=True):
+                remaining_unmet = unmet_after_initial[shortage_name]
+                if remaining_unmet <= 0:
+                    continue
+                candidates = [
+                    name
+                    for name in ordered_names
+                    if name != shortage_name and surplus_after_initial[name] > 0
+                ]
+                if not candidates:
+                    continue
+                weights = stable_softmax([attractiveness[name] for name in candidates])
+                for candidate, weight in zip(candidates, weights, strict=True):
+                    if remaining_unmet <= 0:
+                        break
+                    amount = min(surplus_after_initial[candidate], remaining_unmet * weight)
+                    if amount <= 0:
+                        continue
+                    allocated_demand[shortage_name] -= amount
+                    allocated_demand[candidate] += amount
+                    reallocated_out[shortage_name] += amount
+                    reallocated_in[candidate] += amount
+                    surplus_after_initial[candidate] -= amount
+                    remaining_unmet -= amount
+
+        for name in ordered_names:
+            demand_share[name] = 0.0 if snapshot.true_demand <= 0 else allocated_demand[name] / snapshot.true_demand
             shortage_pre[name] = max(0.0, allocated_demand[name] - supply_start[name])
             surplus_pre[name] = max(0.0, supply_start[name] - allocated_demand[name])
 
@@ -197,6 +264,8 @@ class MarketEnvironment:
         refused_help: dict[str, int] = {name: 0 for name in ordered_names}
 
         for shortage_name in shortage_order:
+            if not self.market.transfer_enabled:
+                break
             if shortage_remaining[shortage_name] <= 0:
                 continue
             shortage_state = self.states[shortage_name]
@@ -244,18 +313,30 @@ class MarketEnvironment:
             rep_pricing_start = state.rep_pricing
             rep_cooperation_start = state.rep_cooperation
             total_supply = supply_start[name] + transfer_in[name] - transfer_out[name]
-            realized_sales = min(total_supply, allocated_demand[name])
-            shortage_post = max(0.0, allocated_demand[name] - total_supply)
-            inventory_end = max(0.0, total_supply - realized_sales)
+            backlog_start = state.backlog if self.market.sla_queue_enabled else 0.0
+            delivered_backlog = min(backlog_start, total_supply)
+            supply_for_current = max(0.0, total_supply - delivered_backlog)
+            realized_sales = min(supply_for_current, allocated_demand[name])
+            shortage_post = max(0.0, allocated_demand[name] - supply_for_current)
+            contract_demand = sum(
+                segment_allocations[name][segment.name] * segment.contract_fraction
+                for segment in self.market.customer_segments
+            )
+            contract_ratio = 0.0 if allocated_demand[name] <= 0 else min(1.0, contract_demand / allocated_demand[name])
+            backlog_added = shortage_post * contract_ratio if self.market.sla_queue_enabled else 0.0
+            late_units = max(0.0, backlog_start - delivered_backlog) if self.market.sla_queue_enabled else 0.0
+            backlog_end = max(0.0, backlog_start - delivered_backlog) + backlog_added
+            sla_queue_penalty = late_units * agent_cfg.sla_penalty * self.market.sla_backlog_penalty_multiplier
+            inventory_end = max(0.0, supply_for_current - realized_sales)
             obsolescence_units = agent_cfg.obsolescence_rate * inventory_end
             next_inventory = max(0.0, inventory_end - obsolescence_units)
-            revenue = realized_sales * action.price
+            revenue = (realized_sales + delivered_backlog) * action.price
             prod_cost = action.quantity * agent_cfg.linear_cost + 0.5 * (action.quantity**2) * agent_cfg.quadratic_cost
             holding_cost = next_inventory * agent_cfg.holding_cost_rate
             obsolescence_cost = obsolescence_units * agent_cfg.obsolescence_penalty
             sla_penalty = shortage_post * agent_cfg.sla_penalty
             menu_cost = abs(action.price - state.last_price) * agent_cfg.menu_cost_rate
-            profit = revenue + transfer_revenue[name] - transfer_cost[name] - prod_cost - holding_cost - obsolescence_cost - sla_penalty - menu_cost
+            profit = revenue + transfer_revenue[name] - transfer_cost[name] - prod_cost - holding_cost - obsolescence_cost - sla_penalty - sla_queue_penalty - menu_cost
             service_rate = 0.0 if allocated_demand[name] <= 0 else realized_sales / allocated_demand[name]
             help_ratio = 0.0 if surplus_pre[name] <= 0 else transfer_out[name] / surplus_pre[name]
             peer_prices = [price for idx, price in enumerate(prices) if ordered_names[idx] != name]
@@ -312,6 +393,7 @@ class MarketEnvironment:
             state.last_shortage = shortage_post
             state.last_price = action.price
             state.last_dump_flag = bool(dump_flag)
+            state.backlog = backlog_end
             decision_trace = action.trace
             strategy_update_trace = action.strategy_update_trace
             row_payloads[name] = {
@@ -352,8 +434,18 @@ class MarketEnvironment:
                 "transfer_accepts": transfer_accepts[name],
                 "coop_probability": 0.0 if transfer_attempts[name] <= 0 else transfer_probability_sum[name] / transfer_attempts[name],
                 "coop_accept_rate": 0.0 if transfer_attempts[name] <= 0 else transfer_accepts[name] / transfer_attempts[name],
+                "segment_demand": json.dumps(segment_demand, ensure_ascii=False, separators=(",", ":")),
+                "segment_allocations": json.dumps(segment_allocations[name], ensure_ascii=False, separators=(",", ":")),
+                "reallocated_in": reallocated_in[name],
+                "reallocated_out": reallocated_out[name],
                 "realized_sales": realized_sales,
                 "shortage_post_transfer": shortage_post,
+                "backlog_start": backlog_start,
+                "new_contract_demand": contract_demand,
+                "delivered_backlog": delivered_backlog,
+                "backlog_end": backlog_end,
+                "late_units": late_units,
+                "sla_queue_penalty": sla_queue_penalty,
                 "inventory_end": next_inventory,
                 "obsolescence_units": obsolescence_units,
                 "revenue": revenue,
@@ -423,8 +515,18 @@ class MarketEnvironment:
                     transfer_accepts=int(payload["transfer_accepts"]),
                     coop_probability=float(payload["coop_probability"]),
                     coop_accept_rate=float(payload["coop_accept_rate"]),
+                    segment_demand=str(payload["segment_demand"]),
+                    segment_allocations=str(payload["segment_allocations"]),
+                    reallocated_in=float(payload["reallocated_in"]),
+                    reallocated_out=float(payload["reallocated_out"]),
                     realized_sales=float(payload["realized_sales"]),
                     shortage_post_transfer=float(payload["shortage_post_transfer"]),
+                    backlog_start=float(payload["backlog_start"]),
+                    new_contract_demand=float(payload["new_contract_demand"]),
+                    delivered_backlog=float(payload["delivered_backlog"]),
+                    backlog_end=float(payload["backlog_end"]),
+                    late_units=float(payload["late_units"]),
+                    sla_queue_penalty=float(payload["sla_queue_penalty"]),
                     inventory_end=float(payload["inventory_end"]),
                     obsolescence_units=float(payload["obsolescence_units"]),
                     revenue=float(payload["revenue"]),

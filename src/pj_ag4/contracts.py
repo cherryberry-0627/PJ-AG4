@@ -355,8 +355,18 @@ class SettlementRow:
     transfer_accepts: int
     coop_probability: float
     coop_accept_rate: float
+    segment_demand: str
+    segment_allocations: str
+    reallocated_in: float
+    reallocated_out: float
     realized_sales: float
     shortage_post_transfer: float
+    backlog_start: float
+    new_contract_demand: float
+    delivered_backlog: float
+    backlog_end: float
+    late_units: float
+    sla_queue_penalty: float
     inventory_end: float
     obsolescence_units: float
     revenue: float
@@ -387,6 +397,7 @@ class RoundTrace:
     transfer_volume: float
     default_count: int
     dump_count: int
+    backlog_total: float
     summary: str
 
     def to_public_dict(self) -> dict[str, Any]:

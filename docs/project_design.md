@@ -703,6 +703,10 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `transfer_accepts` | 本轮作为供给方接受协作的次数 |
 | `coop_probability` | 本轮协作接受概率均值 |
 | `coop_accept_rate` | 本轮合作接受率 |
+| `segment_demand` | 客户分层需求 JSON，如 training burst、enterprise SLA、spot workload |
+| `segment_allocations` | 该 agent 获得的分层需求 JSON |
+| `reallocated_in` | 二阶段客户改签流入量 |
+| `reallocated_out` | 二阶段客户改签流出量 |
 
 #### 结算字段
 
@@ -717,6 +721,12 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `holding_cost` | IDC 能耗与占用成本 |
 | `obsolescence_cost` | 技术折旧损失 |
 | `sla_penalty` | SLA 违约惩罚 |
+| `backlog_start` | 轮初 SLA backlog |
+| `new_contract_demand` | 本轮新增合同型需求 |
+| `delivered_backlog` | 本轮交付的历史 backlog |
+| `backlog_end` | 轮末 SLA backlog |
+| `late_units` | 逾期 backlog 数量 |
+| `sla_queue_penalty` | SLA 队列逾期罚金 |
 | `menu_cost` | 调价摩擦成本 |
 | `profit` | 当轮利润 |
 | `cum_profit` | 累计利润 |

@@ -20,6 +20,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Directory for CSV and figures",
     )
     parser.add_argument(
+        "--scenario",
+        choices=("baseline", "price_war", "supply_shock", "high_volatility", "no_reputation", "no_transfer"),
+        default="baseline",
+        help="Market scenario profile",
+    )
+    parser.add_argument(
         "--no-figure", action="store_true", help="Skip figure generation"
     )
     parser.add_argument(
@@ -58,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
         rounds=args.rounds,
         output_dir=args.output_dir,
         agent_mode=args.agent_mode,
+        scenario=args.scenario,
         llm_base_url=args.llm_base_url,
         llm_api_key=args.llm_api_key,
         llm_model=args.llm_model,

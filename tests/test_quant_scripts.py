@@ -4,6 +4,7 @@ from pathlib import Path
 
 from quant.run_benchmarks import run_benchmark_suite
 from quant.run_full_quant import run_full_quant
+from quant.run_scenarios import run_scenario_sweep
 from quant.run_sensitivity import run_sensitivity_suite
 
 
@@ -56,3 +57,18 @@ def test_run_full_quant_writes_full_report(tmp_path: Path) -> None:
     assert result.benchmark_report.exists()
     assert result.sensitivity_report.exists()
     assert result.full_report.exists()
+
+
+def test_run_scenario_sweep_writes_summary_and_report(tmp_path: Path) -> None:
+    result = run_scenario_sweep(
+        scenarios=("baseline", "supply_shock"),
+        strategies=("heuristic",),
+        seeds=(7,),
+        rounds=2,
+        output_root=tmp_path / "scenarios",
+    )
+
+    assert result.summary_csv.exists()
+    assert result.report_path.exists()
+    assert len(result.artifacts) == 2
+    assert "supply_shock" in result.report_path.read_text(encoding="utf-8")

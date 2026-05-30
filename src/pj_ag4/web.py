@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -33,6 +33,7 @@ class WebOptions:
     llm_base_url: str | None
     llm_api_key: str | None
     llm_model: str | None
+    scenario: str = "baseline"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--rounds", type=int, default=30, help="Default number of simulation rounds")
     parser.add_argument("--seed", type=int, default=7, help="Default random seed")
     parser.add_argument("--agent-mode", choices=("heuristic", "llm", "llm-adaptive"), default="heuristic", help="Default policy backend")
+    parser.add_argument("--scenario", choices=("baseline", "price_war", "supply_shock", "high_volatility", "no_reputation", "no_transfer"), default="baseline", help="Default market scenario")
     parser.add_argument("--llm-base-url", type=str, default=None, help="OpenAI-compatible base URL for LLM mode")
     parser.add_argument("--llm-api-key", type=str, default=None, help="API key for LLM mode")
     parser.add_argument("--llm-model", type=str, default=None, help="Model name for LLM mode")
@@ -76,6 +78,7 @@ def resolve_options(query: dict[str, list[str]], defaults: WebOptions) -> WebOpt
         seed=_coerce_int(query, "seed", defaults.seed, minimum=0, maximum=999999),
         rounds=_coerce_int(query, "rounds", defaults.rounds, minimum=1, maximum=365),
         agent_mode=_coerce_mode(query, defaults.agent_mode),
+        scenario=query.get("scenario", [defaults.scenario])[0],
         shock_scale=_coerce_float(query, "shock_scale", defaults.shock_scale, minimum=-2.0, maximum=2.0),
         demand_bias=_coerce_int(query, "demand_bias", defaults.demand_bias, minimum=-40, maximum=40),
         llm_base_url=query.get("llm_base_url", [defaults.llm_base_url or ""])[0] or defaults.llm_base_url,
@@ -88,6 +91,7 @@ def resolve_options(query: dict[str, list[str]], defaults: WebOptions) -> WebOpt
         seed=options.seed,
         rounds=options.rounds,
         agent_mode=options.agent_mode,
+        scenario=options.scenario,
         shock_scale=options.shock_scale,
         demand_bias=options.demand_bias,
         llm_base_url=options.llm_base_url or LOCAL_LLM_BASE_URL,
@@ -102,6 +106,7 @@ def build_config(options: WebOptions, *, rounds: int | None = None) -> Simulatio
         rounds=rounds if rounds is not None else options.rounds,
         output_dir=Path("outputs") / "web_runtime",
         agent_mode=options.agent_mode,
+        scenario=options.scenario,
         llm_base_url=options.llm_base_url,
         llm_api_key=options.llm_api_key,
         llm_model=options.llm_model,
@@ -164,6 +169,7 @@ def _attach_runtime_controls(payload: dict[str, object], options: WebOptions) ->
     payload["controls"] = {
         "shockScale": options.shock_scale,
         "demandBias": options.demand_bias,
+        "scenario": options.scenario,
     }
     market = payload.get("market")
     if isinstance(market, dict):
@@ -214,6 +220,24 @@ def iter_runtime_payloads(
             snapshot=snapshot,
             actions=actions,
         )
+        updated_rows = []
+        for row in round_rows:
+            agent = agents.get(row.agent_name)
+            observe_result = getattr(agent, "observe_result", None)
+            if not callable(observe_result):
+                updated_rows.append(row)
+                continue
+            trace = observe_result(row, round_rows)
+            state = getattr(agent, "strategy_state", None)
+            updated_rows.append(
+                replace(
+                    row,
+                    strategy_state=state.to_json() if state is not None else row.strategy_state,
+                    strategy_update_reason=trace.reason,
+                    strategy_update_trace=trace.to_json(),
+                )
+            )
+        round_rows = updated_rows
         rows.extend(round_rows)
         observations.record_round(snapshot=snapshot, actions=actions)
         if round_index < start_round:
@@ -229,6 +253,7 @@ def build_dashboard_page(options: WebOptions) -> str:
             "seed": options.seed,
             "rounds": options.rounds,
             "agent_mode": options.agent_mode,
+            "scenario": options.scenario,
             "shock_scale": options.shock_scale,
             "demand_bias": options.demand_bias,
         }
@@ -250,6 +275,17 @@ def build_dashboard_page(options: WebOptions) -> str:
                       <option value="heuristic"{" selected" if options.agent_mode == "heuristic" else ""}>heuristic</option>
                       <option value="llm"{" selected" if options.agent_mode == "llm" else ""}>llm</option>
                       <option value="llm-adaptive"{" selected" if options.agent_mode == "llm-adaptive" else ""}>llm-adaptive</option>
+                    </select>
+                  </label>
+                  <label class="runtime-field" for="runtime-scenario">
+                    <span class="runtime-label">Scenario</span>
+                    <select id="runtime-scenario" class="terminal-select" name="scenario">
+                      <option value="baseline"{" selected" if options.scenario == "baseline" else ""}>baseline</option>
+                      <option value="price_war"{" selected" if options.scenario == "price_war" else ""}>price_war</option>
+                      <option value="supply_shock"{" selected" if options.scenario == "supply_shock" else ""}>supply_shock</option>
+                      <option value="high_volatility"{" selected" if options.scenario == "high_volatility" else ""}>high_volatility</option>
+                      <option value="no_reputation"{" selected" if options.scenario == "no_reputation" else ""}>no_reputation</option>
+                      <option value="no_transfer"{" selected" if options.scenario == "no_transfer" else ""}>no_transfer</option>
                     </select>
                   </label>
                 </div>
@@ -365,6 +401,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         rounds=args.rounds,
         agent_mode=args.agent_mode,
+        scenario=args.scenario,
         shock_scale=0.0,
         demand_bias=0,
         llm_base_url=args.llm_base_url,
