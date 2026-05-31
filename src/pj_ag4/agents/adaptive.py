@@ -79,7 +79,7 @@ class AdaptiveLLMAgent:
         previous_state = self._state
         try:
             raw_delta, reason = self._query_strategy_delta(row, round_rows)
-            bounded_delta = self._bound_delta(raw_delta)
+            bounded_delta = self._bound_delta(raw_delta, previous_state)
             next_state = previous_state.apply_delta(bounded_delta)
             trace = StrategyUpdateTrace(
                 source="llm-adaptive",
@@ -96,7 +96,7 @@ class AdaptiveLLMAgent:
             )
         except Exception as exc:
             raw_delta = self._fallback_delta(row, round_rows)
-            bounded_delta = self._bound_delta(raw_delta)
+            bounded_delta = self._bound_delta(raw_delta, previous_state)
             next_state = previous_state.apply_delta(bounded_delta)
             trace = StrategyUpdateTrace(
                 source="llm-adaptive-fallback",
@@ -235,6 +235,10 @@ class AdaptiveLLMAgent:
                 "shortage": row.shortage_post_transfer,
                 "service_rate": row.service_rate,
                 "market_share": row.demand_share,
+                "backlog_end": row.backlog_end,
+                "late_units": row.late_units,
+                "sla_queue_penalty": row.sla_queue_penalty,
+                "price_pressure_cost": row.price_pressure_cost,
             },
             "market": {
                 "round": row.round,
@@ -248,6 +252,7 @@ class AdaptiveLLMAgent:
             },
             "instruction": (
                 "Update strategy parameters for the next round. Keep personality persistent. "
+                "Use small changes unless the outcome shows repeated shortage, backlog, or losses. "
                 "Do not output direct price, quantity, or forecast."
             ),
         }
@@ -262,12 +267,17 @@ class AdaptiveLLMAgent:
                 delta[field] = 0.0
         return delta
 
-    def _bound_delta(self, raw_delta: dict[str, float]) -> dict[str, float]:
+    def _bound_delta(self, raw_delta: dict[str, float], state: StrategyState | None = None) -> dict[str, float]:
         bounded: dict[str, float] = {}
         for field in StrategyState.fields():
             raw_value = clamp(float(raw_delta.get(field, 0.0)), -0.1, 0.1)
             weighted = raw_value * float(self._personality.delta_weights.get(field, 1.0))
             limit = abs(float(self._personality.max_delta_by_param.get(field, 0.1)))
+            if state is not None:
+                current = float(getattr(state, field))
+                room = (0.95 - current) if weighted > 0 else (current - 0.05)
+                edge_damper = clamp(room / 0.25, 0.20, 1.0)
+                weighted *= edge_damper
             bounded[field] = clamp(weighted, -limit, limit)
         return bounded
 

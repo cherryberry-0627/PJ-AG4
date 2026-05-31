@@ -234,7 +234,10 @@ class MarketEnvironment:
                 for candidate, weight in zip(candidates, weights, strict=True):
                     if remaining_unmet <= 0:
                         break
-                    amount = min(surplus_after_initial[candidate], remaining_unmet * weight)
+                    amount = min(
+                        surplus_after_initial[candidate],
+                        remaining_unmet * weight * self.market.reallocation_fill_rate,
+                    )
                     if amount <= 0:
                         continue
                     allocated_demand[shortage_name] -= amount
@@ -335,8 +338,24 @@ class MarketEnvironment:
             holding_cost = next_inventory * agent_cfg.holding_cost_rate
             obsolescence_cost = obsolescence_units * agent_cfg.obsolescence_penalty
             sla_penalty = shortage_post * agent_cfg.sla_penalty
+            spot_volume = float(segment_allocations[name].get("spot_workload", 0.0))
+            discount_depth = max(0.0, agent_cfg.base_price - action.price)
+            price_pressure_cost = self.market.price_pressure_cost_rate * (
+                0.45 * spot_volume + realized_sales * discount_depth
+            )
             menu_cost = abs(action.price - state.last_price) * agent_cfg.menu_cost_rate
-            profit = revenue + transfer_revenue[name] - transfer_cost[name] - prod_cost - holding_cost - obsolescence_cost - sla_penalty - sla_queue_penalty - menu_cost
+            profit = (
+                revenue
+                + transfer_revenue[name]
+                - transfer_cost[name]
+                - prod_cost
+                - holding_cost
+                - obsolescence_cost
+                - sla_penalty
+                - sla_queue_penalty
+                - price_pressure_cost
+                - menu_cost
+            )
             service_rate = 0.0 if allocated_demand[name] <= 0 else realized_sales / allocated_demand[name]
             help_ratio = 0.0 if surplus_pre[name] <= 0 else transfer_out[name] / surplus_pre[name]
             peer_prices = [price for idx, price in enumerate(prices) if ordered_names[idx] != name]
@@ -453,6 +472,7 @@ class MarketEnvironment:
                 "holding_cost": holding_cost,
                 "obsolescence_cost": obsolescence_cost,
                 "sla_penalty": sla_penalty,
+                "price_pressure_cost": price_pressure_cost,
                 "menu_cost": menu_cost,
                 "profit": profit,
                 "cum_profit": state.cumulative_profit,
@@ -534,6 +554,7 @@ class MarketEnvironment:
                     holding_cost=float(payload["holding_cost"]),
                     obsolescence_cost=float(payload["obsolescence_cost"]),
                     sla_penalty=float(payload["sla_penalty"]),
+                    price_pressure_cost=float(payload["price_pressure_cost"]),
                     menu_cost=float(payload["menu_cost"]),
                     profit=float(payload["profit"]),
                     cum_profit=float(payload["cum_profit"]),

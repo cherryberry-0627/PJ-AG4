@@ -727,6 +727,7 @@ CSV 采用长表结构，每一行对应一个 `(round, agent_id)` 观测。
 | `backlog_end` | 轮末 SLA backlog |
 | `late_units` | 逾期 backlog 数量 |
 | `sla_queue_penalty` | SLA 队列逾期罚金 |
+| `price_pressure_cost` | 价格战或 spot 获客带来的促销/竞价摩擦成本 |
 | `menu_cost` | 调价摩擦成本 |
 | `profit` | 当轮利润 |
 | `cum_profit` | 累计利润 |

@@ -55,6 +55,7 @@ def _agent_summary_rows(rows: Sequence[SettlementRow]) -> list[list[object]]:
                 mean(row.service_rate for row in agent_rows),
                 sum(row.transfer_in for row in agent_rows),
                 sum(row.transfer_out for row in agent_rows),
+                sum(row.price_pressure_cost for row in agent_rows),
                 sum(row.dump_flag for row in agent_rows),
                 sum(row.default_flag for row in agent_rows),
                 final.inventory_end,
@@ -250,6 +251,7 @@ def write_simulation_report(
     )
     market_total_sales = sum(row.realized_sales for row in rows)
     total_profit = sum(row.profit for row in rows)
+    total_price_pressure_cost = sum(row.price_pressure_cost for row in rows)
     avg_price = mean(row.market_avg_price for row in rows) if rows else 0.0
     fulfillment = (
         market_total_sales / market_total_demand if market_total_demand else 0.0
@@ -283,6 +285,7 @@ def write_simulation_report(
                 "Fulfillment",
                 "Average Market Price",
                 "Total Profit",
+                "Price Pressure Cost",
             ],
             [
                 [
@@ -291,6 +294,7 @@ def write_simulation_report(
                     fulfillment,
                     avg_price,
                     total_profit,
+                    total_price_pressure_cost,
                 ]
             ],
         ),
@@ -309,6 +313,7 @@ def write_simulation_report(
                 "Avg Service Rate",
                 "Transfer In",
                 "Transfer Out",
+                "Price Pressure Cost",
                 "Dump Flags",
                 "Default Flags",
                 "Final Inventory",

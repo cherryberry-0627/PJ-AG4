@@ -98,9 +98,11 @@ class MarketConfig:
     demand_window: int = 5
     customer_segments: tuple[CustomerSegmentConfig, ...] = field(default_factory=_default_customer_segments)
     reallocation_enabled: bool = True
+    reallocation_fill_rate: float = 1.0
     transfer_enabled: bool = True
     sla_queue_enabled: bool = True
     sla_backlog_penalty_multiplier: float = 0.75
+    price_pressure_cost_rate: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -209,15 +211,17 @@ def _market_for_scenario(scenario: str, market: MarketConfig) -> MarketConfig:
     if scenario_key == "price_war":
         return replace(
             market,
-            price_weight=1.0,
-            reputation_weight=0.95,
+            price_weight=1.15,
+            reputation_weight=0.85,
+            transfer_markup=0.02,
+            price_pressure_cost_rate=0.55,
             reallocation_enabled=True,
             transfer_enabled=True,
             customer_segments=_normalize_segments(
                 (
-                    CustomerSegmentConfig("training_burst", 0.42, 0.95, 0.65, 1.0, 0.25, {"hyperscaler": 0.35}),
-                    CustomerSegmentConfig("enterprise_sla", 0.24, 0.45, 1.3, 1.0, 1.1, {"premium": 0.5}, 0.8),
-                    CustomerSegmentConfig("spot_workload", 0.34, 1.35, 0.35, 0.75, 0.1, {"spot": 0.55}),
+                    CustomerSegmentConfig("training_burst", 0.38, 1.05, 0.55, 0.95, 0.20, {"hyperscaler": 0.30}),
+                    CustomerSegmentConfig("enterprise_sla", 0.22, 0.50, 1.15, 1.0, 0.95, {"premium": 0.45}, 0.8),
+                    CustomerSegmentConfig("spot_workload", 0.40, 1.70, 0.20, 0.65, 0.05, {"spot": 0.65}),
                 )
             ),
         )
@@ -225,11 +229,12 @@ def _market_for_scenario(scenario: str, market: MarketConfig) -> MarketConfig:
         return replace(
             market,
             shock_round=8,
-            shock_magnitude=150.0,
+            shock_magnitude=60.0,
             ar_sigma=9.0,
-            max_transfer=25.0,
-            transfer_markup=0.08,
-            cooperation_alpha0=-0.2,
+            max_transfer=35.0,
+            transfer_markup=0.04,
+            cooperation_alpha0=0.25,
+            reallocation_fill_rate=0.60,
             transfer_enabled=True,
             sla_queue_enabled=True,
         )
@@ -250,6 +255,21 @@ def _market_for_scenario(scenario: str, market: MarketConfig) -> MarketConfig:
             reputation_delivery_weight=0.0,
             reputation_pricing_weight=0.0,
             reputation_cooperation_weight=0.0,
+            customer_segments=_normalize_segments(
+                tuple(
+                    CustomerSegmentConfig(
+                        name=segment.name,
+                        demand_fraction=segment.demand_fraction,
+                        price_weight=segment.price_weight,
+                        reputation_weight=0.0,
+                        brand_weight=segment.brand_weight,
+                        sla_weight=0.0,
+                        role_bias=segment.role_bias,
+                        contract_fraction=segment.contract_fraction,
+                    )
+                    for segment in market.customer_segments
+                )
+            ),
         )
     if scenario_key == "no_transfer":
         return replace(market, transfer_enabled=False, max_transfer=0.0)

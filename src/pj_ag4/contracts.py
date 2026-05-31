@@ -19,6 +19,10 @@ def _unit_interval(value: Any) -> float:
     return max(0.0, min(1.0, numeric))
 
 
+def _adaptive_interval(value: Any) -> float:
+    return max(0.05, min(0.95, _unit_interval(value)))
+
+
 def _float_dict(value: Any) -> dict[str, float]:
     if not isinstance(value, dict):
         return {}
@@ -117,7 +121,7 @@ class StrategyState:
 
     def apply_delta(self, delta: dict[str, float]) -> "StrategyState":
         values = {
-            field: _unit_interval(getattr(self, field) + float(delta.get(field, 0.0)))
+            field: _adaptive_interval(getattr(self, field) + float(delta.get(field, 0.0)))
             for field in self.fields()
         }
         return StrategyState(**values)
@@ -374,6 +378,7 @@ class SettlementRow:
     holding_cost: float
     obsolescence_cost: float
     sla_penalty: float
+    price_pressure_cost: float
     menu_cost: float
     profit: float
     cum_profit: float
