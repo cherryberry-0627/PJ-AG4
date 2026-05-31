@@ -8,6 +8,8 @@ PJ-AG4 is a local, reproducible multi-agent simulation with:
 
 - 3 independent market participants
 - deterministic baseline behavior and optional LLM-backed agents
+- segmented GPU demand, reallocation, transfer, SLA backlog, and price-pressure mechanics
+- bounded LLM-adaptive strategy updates with structured decision traces
 - round-level CSV outputs
 - summary visualization artifacts
 - quant-style benchmark and sensitivity tooling
@@ -52,6 +54,27 @@ lessons.md               Anti-regression notes
 - `strategy_dashboard.html`
 - `simulation_report.md`
 
+## Market Mechanisms
+
+The current final-project version models a GPU market with several interacting layers:
+
+- **Customer segments:** demand is split into `training_burst`, `enterprise_sla`, and `spot_workload`; each segment has different price, reputation, brand, and SLA preferences.
+- **Segment-wise allocation:** each customer segment chooses agents through its own logit score, so PremiumCloud, Hyperscaler, and SpotBroker naturally attract different demand mixes.
+- **Two-stage reallocation:** unmet demand can be reassigned to agents with remaining surplus before formal transfer/default handling.
+- **Agent transfer:** agents with surplus can help agents facing shortage, with cooperation probabilities and transfer markup.
+- **SLA backlog queue:** contract-heavy unmet demand rolls into backlog and can create late-unit penalties in later rounds.
+- **Price pressure cost:** price-war scenarios include spot acquisition and promotional friction, so aggressive demand capture is not free.
+- **Bounded LLM adaptation:** `llm-adaptive` agents update strategy state after each round while risk gates and damping prevent extreme one-step behavior.
+
+Built-in scenario profiles:
+
+- `baseline`: normal segmented market with reputation, transfer, reallocation, and SLA backlog enabled.
+- `price_war`: more price-sensitive spot demand plus price-pressure cost.
+- `supply_shock`: demand shock with visible backlog/default pressure and transfer opportunities.
+- `high_volatility`: higher process and observation noise.
+- `no_reputation`: ablation that removes reputation/SLA weighting from customer choice.
+- `no_transfer`: ablation that disables agent-to-agent transfer.
+
 ## Run
 
 Install the package in editable mode and run the baseline simulation:
@@ -66,6 +89,20 @@ Run the final presentation scenario with the segmented market, reallocation, tra
 ```bash
 pj-ag4-run --scenario supply_shock --rounds 30 --output-dir outputs/final
 pj-ag4-scenarios --rounds 30 --seeds 7 11 23 --output-root outputs/final/scenario_sweep
+```
+
+Run a real LLM-adaptive scenario against the local OpenAI-compatible gateway:
+
+```bash
+pj-ag4-run \
+  --agent-mode llm-adaptive \
+  --scenario supply_shock \
+  --rounds 12 \
+  --seed 7 \
+  --llm-base-url http://127.0.0.1:8045/v1 \
+  --llm-api-key local-dev-key \
+  --llm-model gemini-3-flash \
+  --output-dir outputs/llm_demo
 ```
 
 You can also run the bundled script directly:
