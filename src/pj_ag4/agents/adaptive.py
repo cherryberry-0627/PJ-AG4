@@ -263,10 +263,10 @@ class AdaptiveLLMAgent:
             ),
         }
         if self._context_window > 0:
-            payload["rolling_context"] = self._rolling_context_payload()
+            payload["llm_context"] = self._rolling_context_payload()
             payload["instruction"] = (
                 "Update strategy parameters for the next round. Keep personality persistent. "
-                "Use rolling_context only as compressed historical evidence; last_action/outcome are the freshest round. "
+                "Use llm_context only as compressed historical evidence; last_action/outcome are the freshest round. "
                 "Use small changes unless the outcome shows repeated shortage, backlog, or losses. "
                 "Do not output direct price, quantity, or forecast."
             )
@@ -280,33 +280,33 @@ class AdaptiveLLMAgent:
         best_profit = max(round_rows, key=lambda item: item.profit)
         context = {
             "round": row.round,
+            "signals": self._context_signals(row, competitor_avg_price=competitor_avg_price, best_agent=best_profit.agent_name),
             "my": {
-                "forecast": row.forecast_demand,
                 "price": round(row.price, 2),
                 "quantity": row.quantity,
+                "forecast": row.forecast_demand,
                 "profit": round(row.profit, 2),
-                "cumulative_profit": round(row.cum_profit, 2),
-                "service_rate": round(row.service_rate, 3),
-                "market_share": round(row.demand_share, 3),
-                "forecast_error_abs": round(row.forecast_error_abs, 2),
+                "cum_profit": round(row.cum_profit, 2),
+                "service": round(row.service_rate, 3),
                 "shortage": round(row.shortage_post_transfer, 2),
-                "inventory_end": round(row.inventory_end, 2),
-                "backlog_end": round(row.backlog_end, 2),
+                "inventory": round(row.inventory_end, 2),
+                "forecast_error": round(row.forecast_error_abs, 2),
+                "share": round(row.demand_share, 3),
+                "backlog": round(row.backlog_end, 2),
                 "late_units": round(row.late_units, 2),
                 "transfer_in": round(row.transfer_in, 2),
                 "transfer_out": round(row.transfer_out, 2),
             },
             "market": {
-                "true_demand": row.demand_true,
-                "observed_demand": row.demand_obs,
                 "avg_price": round(row.market_avg_price, 2),
                 "competitor_avg_price": round(competitor_avg_price, 2),
+                "true_demand": row.demand_true,
+                "observed_demand": row.demand_obs,
                 "total_sales": round(row.market_total_sales, 2),
                 "default_flag": row.default_flag,
-                "shock_component": round(row.shock_component, 2),
+                "shock": round(row.shock_component, 2),
             },
-            "best_agent": best_profit.agent_name,
-            "best_profit": round(best_profit.profit, 2),
+            "leader": {"agent": best_profit.agent_name, "profit": round(best_profit.profit, 2)},
         }
         self._context_ring.append(context)
         if len(self._context_ring) > self._context_window:
@@ -314,16 +314,62 @@ class AdaptiveLLMAgent:
 
     def _rolling_context_payload(self) -> dict[str, Any]:
         if self._context_window <= 0:
-            return {"enabled": False}
+            return {
+                "window": 0,
+                "selection": "disabled",
+                "compression": "none",
+                "history": [],
+            }
+        if not self._context_ring:
+            return {
+                "window": self._context_window,
+                "selection": "none_until_first_settlement",
+                "compression": "empty",
+                "history": [],
+            }
         return {
-            "enabled": True,
             "window": self._context_window,
+            "selection": "latest_settlement_summaries",
+            "compression": "settlement_rows_compressed_to_action_outcome_market_leader",
+            "active_signals": self._history_signals(),
             "history": list(self._context_ring),
             "instruction": (
                 "Compare recent rounds for persistent shortage, excess inventory, price disadvantage, "
                 "transfer reliance, backlog pressure, and whether another agent is consistently outperforming."
             ),
         }
+
+    def _context_signals(
+        self,
+        row: SettlementRow,
+        *,
+        competitor_avg_price: float,
+        best_agent: str,
+    ) -> list[str]:
+        signals: list[str] = []
+        if row.shortage_post_transfer > 0 or row.backlog_end > 0:
+            signals.append("service_pressure")
+        if row.inventory_end > max(20.0, row.quantity * 0.45):
+            signals.append("inventory_pressure")
+        if row.profit < 0:
+            signals.append("loss_round")
+        if row.forecast_error_abs > 35 or abs(row.shock_component) >= 0.5:
+            signals.append("forecast_or_shock_error")
+        if row.price > competitor_avg_price * 1.08:
+            signals.append("priced_above_competitors")
+        if row.price < competitor_avg_price * 0.92:
+            signals.append("priced_below_competitors")
+        if row.agent_name != best_agent:
+            signals.append("not_profit_leader")
+        return signals or ["stable"]
+
+    def _history_signals(self) -> list[str]:
+        signals: list[str] = []
+        for item in self._context_ring:
+            for signal in item.get("signals", []):
+                if signal not in signals:
+                    signals.append(signal)
+        return signals
 
     def _extract_delta(self, payload: dict[str, Any]) -> dict[str, float]:
         delta: dict[str, float] = {}

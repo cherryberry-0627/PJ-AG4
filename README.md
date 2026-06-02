@@ -180,9 +180,9 @@ price_pressure_cost =
 项目现在保留了两条 LLM 决策路线，方便做 ablation：
 
 - `llm`：LLM 直接输出下一轮 `forecast_demand`、`price`、`quantity`，再经过 risk gate。
-- `llm-context`：仍然让 LLM 直接输出 action，但 prompt 中加入最近 6 轮压缩结算记录。
+- `llm-context`：仍然让 LLM 直接输出 action，但 prompt 中加入经过选择和压缩的最近 6 轮结算上下文。
 - `llm-adaptive`：LLM 不直接输出 action，只调整 bounded strategy state。
-- `llm-context-adaptive`：在 `llm-adaptive` 基础上，把最近 6 轮压缩结算记录加入 strategy update prompt。
+- `llm-context-adaptive`：在 `llm-adaptive` 基础上，把同一套 context engineering payload 加入 strategy update prompt。
 
 `llm-adaptive` 模式下，LLM 不直接输出最终价格和数量，而是根据上一轮结果调整一个 bounded strategy state：
 
@@ -202,7 +202,14 @@ price_pressure_cost =
 5. LLM 输出各策略参数的 delta，而不是直接输出下一轮价格或数量。
 6. delta 会经过角色权重、每参数最大步长和边界阻尼处理。
 
-`llm-context-adaptive` 的额外上下文字段来自结算后的 rolling context ring，包含最近 6 轮的本 agent 行为、利润、服务率、库存、shortage、backlog、transfer、market average price、default flag 和当前轮最优 agent。它的作用是帮助 LLM 在更新 strategy state 时识别连续趋势，例如持续库存过剩、连续 backlog、反复依赖 transfer 或长期输给某个竞争者。
+`llm-context` 和 `llm-context-adaptive` 使用同一套 `llm_context` 结构：
+
+- `selection`：说明当前上下文来自最近结算摘要，首轮前会显式标记为空历史。
+- `compression`：说明当前 prompt 使用完整压缩结算摘要，retry prompt 使用更短的 signal/profit/service/inventory summary。
+- `active_signals`：把历史窗口中的风险和竞争信号提取出来，例如 `service_pressure`、`inventory_pressure`、`priced_above_competitors`、`not_profit_leader`。
+- `history`：保留最近 6 轮的本 agent 行为、利润、服务率、库存、shortage、backlog、market average price、shock 和当前轮 profit leader。
+
+这样它不只是“把历史塞进 prompt”，而是让 LLM 能看到经过选择、压缩和标注的历史证据。`llm-context-adaptive` 会用这些证据更新 bounded strategy state，例如识别持续库存过剩、连续 backlog、反复依赖 transfer 或长期输给某个竞争者。
 
 策略状态的实际更新区间是 `[0.05, 0.95]`，不是完整 `[0, 1]`。这样做是为了避免 12 轮内很快贴到极端值。
 

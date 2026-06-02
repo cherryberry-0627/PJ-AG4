@@ -308,54 +308,133 @@ class LLMPolicyAgent(RolePipelineAgent):
 
 
 class LLMContextPlanningStage(LLMPlanningStage):
-    '''实现滚动context窗口，每轮结算后记录结果，并将其在下一轮注入prompt中。'''
+    """LLM planner with a compressed rolling settlement context."""
 
-    def __init__(self, config: AgentConfig, *, llm_config: LLMConfig, client: Any) -> None:
+    def __init__(
+        self,
+        config: AgentConfig,
+        *,
+        llm_config: LLMConfig,
+        client: Any,
+        max_context: int = 6,
+    ) -> None:
         super().__init__(config, llm_config=llm_config, client=client)
         self._context_ring: list[dict[str, Any]] = []
-        self._max_context = 6
+        self._max_context = max(1, max_context)
+
+    @property
+    def context_size(self) -> int:
+        return len(self._context_ring)
 
     def add_round_context(self, row: SettlementRow, round_rows: Sequence[SettlementRow]) -> None:
-        """将本轮结算结果压缩为结构化字典并追加到context ring中。"""
-        competitors = [r for r in round_rows if r.agent_name != row.agent_name]
-        competitor_avg_price = mean(r.price for r in competitors) if competitors else row.price
-        best = max(round_rows, key=lambda r: r.profit)
+        """Compress one settlement row into the rolling context window."""
+        competitors = [item for item in round_rows if item.agent_name != row.agent_name]
+        competitor_avg_price = mean(item.price for item in competitors) if competitors else row.price
+        best = max(round_rows, key=lambda item: item.profit)
         context = {
             "round": row.round,
+            "signals": self._context_signals(row, competitor_avg_price=competitor_avg_price, best_agent=best.agent_name),
             "my": {
-                "price": round(row.price, 1),
+                "price": round(row.price, 2),
                 "quantity": row.quantity,
                 "forecast": row.forecast_demand,
-                "profit": round(row.profit, 1),
-                "cumulative_profit": round(row.cum_profit, 1),
-                "service_rate": round(row.service_rate, 3),
-                "shortage": round(row.shortage_post_transfer, 1),
-                "inventory_end": round(row.inventory_end, 1),
-                "forecast_error": round(row.forecast_error_abs, 1),
-                "market_share": round(row.demand_share, 3),
-                "backlog": round(row.backlog_end, 1),
-                "sla_penalty": round(row.sla_queue_penalty, 1),
+                "profit": round(row.profit, 2),
+                "cum_profit": round(row.cum_profit, 2),
+                "service": round(row.service_rate, 3),
+                "shortage": round(row.shortage_post_transfer, 2),
+                "inventory": round(row.inventory_end, 2),
+                "forecast_error": round(row.forecast_error_abs, 2),
+                "share": round(row.demand_share, 3),
+                "backlog": round(row.backlog_end, 2),
             },
             "market": {
-                "avg_price": round(row.market_avg_price, 1),
-                "competitor_avg_price": round(competitor_avg_price, 1),
-                "total_sales": round(row.market_total_sales, 1),
+                "avg_price": round(row.market_avg_price, 2),
+                "competitor_avg_price": round(competitor_avg_price, 2),
                 "true_demand": row.demand_true,
+                "observed_demand": row.demand_obs,
+                "total_sales": round(row.market_total_sales, 2),
+                "shock": round(row.shock_component, 2),
             },
-            "best_agent": best.agent_name,
-            "best_profit": round(best.profit, 1),
+            "leader": {"agent": best.agent_name, "profit": round(best.profit, 2)},
         }
         self._context_ring.append(context)
         if len(self._context_ring) > self._max_context:
             self._context_ring.pop(0)
+        self._cache_key = None
+        self._cache_value = None
+
+    def _context_signals(
+        self,
+        row: SettlementRow,
+        *,
+        competitor_avg_price: float,
+        best_agent: str,
+    ) -> list[str]:
+        signals: list[str] = []
+        if row.shortage_post_transfer > 0 or row.backlog_end > 0:
+            signals.append("service_pressure")
+        if row.inventory_end > max(20.0, row.quantity * 0.45):
+            signals.append("inventory_pressure")
+        if row.profit < 0:
+            signals.append("loss_round")
+        if row.forecast_error_abs > 35 or abs(row.shock_component) >= 0.5:
+            signals.append("forecast_or_shock_error")
+        if row.price > competitor_avg_price * 1.08:
+            signals.append("priced_above_competitors")
+        if row.price < competitor_avg_price * 0.92:
+            signals.append("priced_below_competitors")
+        if row.agent_name != best_agent:
+            signals.append("not_profit_leader")
+        return signals or ["stable"]
+
+    def _history_signals(self) -> list[str]:
+        signals: list[str] = []
+        for item in self._context_ring:
+            for signal in item.get("signals", []):
+                if signal not in signals:
+                    signals.append(signal)
+        return signals
+
+    def _rolling_context_payload(self, *, compact: bool) -> dict[str, Any]:
+        if not self._context_ring:
+            return {
+                "window": self._max_context,
+                "selection": "none_until_first_settlement",
+                "compression": "empty",
+                "history": [],
+            }
+        if compact:
+            history = [
+                {
+                    "round": item["round"],
+                    "signals": item["signals"],
+                    "profit": item["my"]["profit"],
+                    "service": item["my"]["service"],
+                    "inventory": item["my"]["inventory"],
+                    "leader": item["leader"]["agent"],
+                }
+                for item in self._context_ring
+            ]
+            compression = "signal_profit_service_inventory_summary"
+        else:
+            history = list(self._context_ring)
+            compression = "settlement_rows_compressed_to_action_outcome_market_leader"
+        return {
+            "window": self._max_context,
+            "selection": "latest_settlement_summaries",
+            "compression": compression,
+            "active_signals": self._history_signals(),
+            "history": history,
+        }
 
     def _user_prompt(self, observation: MarketObservation, fallback: AgentAction, *, compact: bool) -> str:
         base_prompt = super()._user_prompt(observation, fallback, compact=compact)
-        if compact or not self._context_ring:
-            return base_prompt
-        # 解析父类 JSON，注入 round_history 字段后重新序列化
         payload = json.loads(base_prompt)
-        payload["round_history"] = list(self._context_ring)
+        payload["llm_context"] = self._rolling_context_payload(compact=compact)
+        payload["instruction"] = (
+            f"{payload['instruction']} Use llm_context as compressed historical evidence; "
+            "the current observation remains the freshest signal."
+        )
         return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
 
@@ -368,8 +447,9 @@ class LLMContextPolicyAgent(LLMPolicyAgent):
         llm_config: LLMConfig,
         fallback_agent: RolePipelineAgent,
         client: Any,
+        max_context: int = 6,
     ) -> None:
-        planner = LLMContextPlanningStage(config, llm_config=llm_config, client=client)
+        planner = LLMContextPlanningStage(config, llm_config=llm_config, client=client, max_context=max_context)
         # 绕过 LLMPolicyAgent.__init__，直接初始化 RolePipelineAgent
         RolePipelineAgent.__init__(
             self,

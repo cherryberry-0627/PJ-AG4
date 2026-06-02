@@ -142,7 +142,7 @@ def test_llm_adaptive_writes_strategy_trace(monkeypatch, tmp_path) -> None:
     assert "strategy_update_trace" in result.csv_path.read_text(encoding="utf-8").splitlines()[0]
 
 
-def test_llm_context_adaptive_injects_rolling_context(monkeypatch, tmp_path) -> None:
+def test_llm_context_adaptive_injects_context_engineering_payload(monkeypatch, tmp_path) -> None:
     completions = _AdaptiveCompletions()
     monkeypatch.setattr(
         "pj_ag4.agents.factory.build_openai_client",
@@ -167,7 +167,9 @@ def test_llm_context_adaptive_injects_rolling_context(monkeypatch, tmp_path) -> 
 
     assert len(result.rows) == 6
     assert all(trace is not None and trace.source == "llm-context-adaptive" for trace in traces)
-    assert any('"rolling_context"' in prompt and '"history":[{"round":0' in prompt for prompt in user_prompts)
+    assert any('"llm_context":{"window":6,"selection":"none_until_first_settlement"' in prompt for prompt in user_prompts)
+    assert any('"llm_context":{"window":6,"selection":"latest_settlement_summaries"' in prompt for prompt in user_prompts)
+    assert any('"signals":' in prompt and '"history":[{"round":0' in prompt for prompt in user_prompts)
 
 
 def test_llm_adaptive_falls_back_when_llm_response_is_invalid(monkeypatch, tmp_path) -> None:
