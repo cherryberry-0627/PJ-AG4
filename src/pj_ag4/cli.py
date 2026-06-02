@@ -43,7 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     # 增加功能
     parser.add_argument(
         "--agent-mode",
-        choices=("heuristic", "llm", "llm-adaptive", "llm-context"),
+        choices=("heuristic", "llm", "llm-adaptive", "llm-context", "llm-context-adaptive"),
         default="heuristic",
         help="Policy backend for agent decisions",
     )

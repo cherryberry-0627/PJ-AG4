@@ -109,18 +109,55 @@ def _build_llm_adaptive_agents(
     return agents
 
 
+def _build_llm_context_adaptive_agents(
+    configs: Sequence[AgentConfig],
+    llm_config: LLMConfig | None = None,
+) -> dict[str, Any]:
+    """为所有配置创建带滚动结算上下文的 LLM 自适应策略 agent。"""
+    if llm_config is None:
+        raise ValueError("llm_config is required when mode='llm-context-adaptive'")
+    if not llm_config.api_key:
+        raise ValueError("llm_config.api_key is required when mode='llm-context-adaptive'")
+    client = build_openai_client(llm_config)
+    agents: dict[str, Any] = {}
+    for cfg in configs:
+        fallback_agent = _build_heuristic_agent(cfg)
+        agents[cfg.name] = AdaptiveLLMAgent(
+            cfg,
+            llm_config=llm_config,
+            fallback_agent=fallback_agent,
+            client=client,
+            trace_source="llm-context-adaptive",
+            context_window=6,
+        )
+    return agents
+
+
 def ensure_builtin_strategies_registered() -> None:
     """
     确保 "heuristic" 和 "llm" 两个内置策略已注册到全局 registry。
     注册操作是幂等的——多次调用不会重复注册。
     """
     global _BUILTINS_REGISTERED
-    if _BUILTINS_REGISTERED and has_strategy("heuristic") and has_strategy("llm") and has_strategy("llm-adaptive") and has_strategy("llm-context"):
+    if (
+        _BUILTINS_REGISTERED
+        and has_strategy("heuristic")
+        and has_strategy("llm")
+        and has_strategy("llm-adaptive")
+        and has_strategy("llm-context")
+        and has_strategy("llm-context-adaptive")
+    ):
         return
     register_strategy("heuristic", title="Heuristic", builder=_build_heuristic_agents, replace=True)
     register_strategy("llm", title="LLM", builder=_build_llm_agents, replace=True)
     register_strategy("llm-adaptive", title="LLM Adaptive", builder=_build_llm_adaptive_agents, replace=True)
     register_strategy("llm-context", title="LLM Context", builder=_build_llm_context_agents, replace=True)
+    register_strategy(
+        "llm-context-adaptive",
+        title="LLM Context Adaptive",
+        builder=_build_llm_context_adaptive_agents,
+        replace=True,
+    )
     _BUILTINS_REGISTERED = True
 
 

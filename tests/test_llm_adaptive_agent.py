@@ -13,8 +13,11 @@ from pj_ag4.simulation import run_simulation
 
 
 class _AdaptiveCompletions:
+    def __init__(self) -> None:
+        self.requests = []
+
     def create(self, **kwargs):
-        del kwargs
+        self.requests.append(kwargs)
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -106,9 +109,10 @@ def test_llm_adaptive_mode_requires_api_key(monkeypatch, tmp_path) -> None:
 
 
 def test_llm_adaptive_writes_strategy_trace(monkeypatch, tmp_path) -> None:
+    completions = _AdaptiveCompletions()
     monkeypatch.setattr(
         "pj_ag4.agents.factory.build_openai_client",
-        lambda llm_config: _FakeClient(_AdaptiveCompletions()),
+        lambda llm_config: _FakeClient(completions),
     )
     config = default_simulation_config(
         seed=4,
@@ -136,6 +140,34 @@ def test_llm_adaptive_writes_strategy_trace(monkeypatch, tmp_path) -> None:
     assert result.report_path is not None
     assert "Adaptive Strategy Trace Samples" in result.report_path.read_text(encoding="utf-8")
     assert "strategy_update_trace" in result.csv_path.read_text(encoding="utf-8").splitlines()[0]
+
+
+def test_llm_context_adaptive_injects_rolling_context(monkeypatch, tmp_path) -> None:
+    completions = _AdaptiveCompletions()
+    monkeypatch.setattr(
+        "pj_ag4.agents.factory.build_openai_client",
+        lambda llm_config: _FakeClient(completions),
+    )
+    config = default_simulation_config(
+        seed=4,
+        rounds=2,
+        output_dir=tmp_path,
+        agent_mode="llm-context-adaptive",
+        llm_api_key="test-key",
+    )
+
+    result = run_simulation(config, output_dir=tmp_path, generate_figure=False)
+    traces = [StrategyUpdateTrace.from_json(row.strategy_update_trace) for row in result.rows]
+    user_prompts = [
+        message["content"]
+        for request in completions.requests
+        for message in request["messages"]
+        if message["role"] == "user"
+    ]
+
+    assert len(result.rows) == 6
+    assert all(trace is not None and trace.source == "llm-context-adaptive" for trace in traces)
+    assert any('"rolling_context"' in prompt and '"history":[{"round":0' in prompt for prompt in user_prompts)
 
 
 def test_llm_adaptive_falls_back_when_llm_response_is_invalid(monkeypatch, tmp_path) -> None:
