@@ -35,6 +35,8 @@ class AdaptiveLLMAgent:
         llm_config: LLMConfig,
         fallback_agent: RolePipelineAgent,
         client: Any,
+        trace_source: str = "llm-adaptive",
+        context_window: int = 0,
     ) -> None:
         self.config = config
         self._llm_config = llm_config
@@ -43,6 +45,9 @@ class AdaptiveLLMAgent:
         self._risk_gate = RiskGateStage(config)
         self._state = StrategyState.from_role(config.role).bounded()
         self._personality = StrategyPersonality.from_role(config.role)
+        self._trace_source = trace_source
+        self._context_window = max(0, context_window)
+        self._context_ring: list[dict[str, Any]] = []
         self._last_update_trace: StrategyUpdateTrace | None = None
         self._last_prompt_excerpt = ""
 
@@ -82,7 +87,7 @@ class AdaptiveLLMAgent:
             bounded_delta = self._bound_delta(raw_delta, previous_state)
             next_state = previous_state.apply_delta(bounded_delta)
             trace = StrategyUpdateTrace(
-                source="llm-adaptive",
+                source=self._trace_source,
                 personality_label=self._personality.label,
                 previous_state=previous_state,
                 raw_delta=raw_delta,
@@ -99,7 +104,7 @@ class AdaptiveLLMAgent:
             bounded_delta = self._bound_delta(raw_delta, previous_state)
             next_state = previous_state.apply_delta(bounded_delta)
             trace = StrategyUpdateTrace(
-                source="llm-adaptive-fallback",
+                source=f"{self._trace_source}-fallback",
                 personality_label=self._personality.label,
                 previous_state=previous_state,
                 raw_delta=raw_delta,
@@ -114,6 +119,7 @@ class AdaptiveLLMAgent:
             )
         self._state = next_state
         self._last_update_trace = trace
+        self._append_round_context(row, round_rows)
         return trace
 
     def _apply_strategy(self, observation: MarketObservation, fallback: AgentAction) -> AgentAction:
@@ -164,7 +170,7 @@ class AdaptiveLLMAgent:
         )
         del observation
         return DecisionTrace(
-            source="llm-adaptive",
+            source=self._trace_source,
             summary=summary,
             forecast_base=float(fallback.forecast_demand),
             forecast_adjustment=float(adjusted.forecast_demand - fallback.forecast_demand),
@@ -216,7 +222,7 @@ class AdaptiveLLMAgent:
         competitors = [item for item in round_rows if item.agent_name != row.agent_name]
         competitor_avg_price = mean(item.price for item in competitors) if competitors else row.price
         best_profit = max(round_rows, key=lambda item: item.profit)
-        return {
+        payload: dict[str, Any] = {
             "agent_name": row.agent_name,
             "agent_role": row.agent_role,
             "agent_persona": self.config.persona,
@@ -256,6 +262,114 @@ class AdaptiveLLMAgent:
                 "Do not output direct price, quantity, or forecast."
             ),
         }
+        if self._context_window > 0:
+            payload["llm_context"] = self._rolling_context_payload()
+            payload["instruction"] = (
+                "Update strategy parameters for the next round. Keep personality persistent. "
+                "Use llm_context only as compressed historical evidence; last_action/outcome are the freshest round. "
+                "Use small changes unless the outcome shows repeated shortage, backlog, or losses. "
+                "Do not output direct price, quantity, or forecast."
+            )
+        return payload
+
+    def _append_round_context(self, row: SettlementRow, round_rows: Sequence[SettlementRow]) -> None:
+        if self._context_window <= 0:
+            return
+        competitors = [item for item in round_rows if item.agent_name != row.agent_name]
+        competitor_avg_price = mean(item.price for item in competitors) if competitors else row.price
+        best_profit = max(round_rows, key=lambda item: item.profit)
+        context = {
+            "round": row.round,
+            "signals": self._context_signals(row, competitor_avg_price=competitor_avg_price, best_agent=best_profit.agent_name),
+            "my": {
+                "price": round(row.price, 2),
+                "quantity": row.quantity,
+                "forecast": row.forecast_demand,
+                "profit": round(row.profit, 2),
+                "cum_profit": round(row.cum_profit, 2),
+                "service": round(row.service_rate, 3),
+                "shortage": round(row.shortage_post_transfer, 2),
+                "inventory": round(row.inventory_end, 2),
+                "forecast_error": round(row.forecast_error_abs, 2),
+                "share": round(row.demand_share, 3),
+                "backlog": round(row.backlog_end, 2),
+                "late_units": round(row.late_units, 2),
+                "transfer_in": round(row.transfer_in, 2),
+                "transfer_out": round(row.transfer_out, 2),
+            },
+            "market": {
+                "avg_price": round(row.market_avg_price, 2),
+                "competitor_avg_price": round(competitor_avg_price, 2),
+                "true_demand": row.demand_true,
+                "observed_demand": row.demand_obs,
+                "total_sales": round(row.market_total_sales, 2),
+                "default_flag": row.default_flag,
+                "shock": round(row.shock_component, 2),
+            },
+            "leader": {"agent": best_profit.agent_name, "profit": round(best_profit.profit, 2)},
+        }
+        self._context_ring.append(context)
+        if len(self._context_ring) > self._context_window:
+            self._context_ring.pop(0)
+
+    def _rolling_context_payload(self) -> dict[str, Any]:
+        if self._context_window <= 0:
+            return {
+                "window": 0,
+                "selection": "disabled",
+                "compression": "none",
+                "history": [],
+            }
+        if not self._context_ring:
+            return {
+                "window": self._context_window,
+                "selection": "none_until_first_settlement",
+                "compression": "empty",
+                "history": [],
+            }
+        return {
+            "window": self._context_window,
+            "selection": "latest_settlement_summaries",
+            "compression": "settlement_rows_compressed_to_action_outcome_market_leader",
+            "active_signals": self._history_signals(),
+            "history": list(self._context_ring),
+            "instruction": (
+                "Compare recent rounds for persistent shortage, excess inventory, price disadvantage, "
+                "transfer reliance, backlog pressure, and whether another agent is consistently outperforming."
+            ),
+        }
+
+    def _context_signals(
+        self,
+        row: SettlementRow,
+        *,
+        competitor_avg_price: float,
+        best_agent: str,
+    ) -> list[str]:
+        signals: list[str] = []
+        if row.shortage_post_transfer > 0 or row.backlog_end > 0:
+            signals.append("service_pressure")
+        if row.inventory_end > max(20.0, row.quantity * 0.45):
+            signals.append("inventory_pressure")
+        if row.profit < 0:
+            signals.append("loss_round")
+        if row.forecast_error_abs > 35 or abs(row.shock_component) >= 0.5:
+            signals.append("forecast_or_shock_error")
+        if row.price > competitor_avg_price * 1.08:
+            signals.append("priced_above_competitors")
+        if row.price < competitor_avg_price * 0.92:
+            signals.append("priced_below_competitors")
+        if row.agent_name != best_agent:
+            signals.append("not_profit_leader")
+        return signals or ["stable"]
+
+    def _history_signals(self) -> list[str]:
+        signals: list[str] = []
+        for item in self._context_ring:
+            for signal in item.get("signals", []):
+                if signal not in signals:
+                    signals.append(signal)
+        return signals
 
     def _extract_delta(self, payload: dict[str, Any]) -> dict[str, float]:
         delta: dict[str, float] = {}
