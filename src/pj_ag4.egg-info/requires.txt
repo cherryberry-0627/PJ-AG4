@@ -1,0 +1,6 @@
+matplotlib>=3.8
+openai<2,>=1.99
+python-dotenv<2,>=1.0
+
+[dev]
+pytest>=8
