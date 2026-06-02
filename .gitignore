@@ -10,3 +10,4 @@ env/
 dist/
 build/
 outputs/
+src/*.egg-info/
