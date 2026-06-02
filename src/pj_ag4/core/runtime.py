@@ -1,3 +1,7 @@
+'''
+更新1：增加context模式
+修改逻辑使得兼容observe_result返回None
+'''
 from __future__ import annotations
 
 from dataclasses import replace
@@ -52,17 +56,17 @@ class SimulationRuntime:
         for row in round_rows:
             agent = agents.get(row.agent_name)
             observe_result = getattr(agent, "observe_result", None)
-            if not callable(observe_result):
-                updated_rows.append(row)
-                continue
-            trace = observe_result(row, round_rows)
-            state = getattr(agent, "strategy_state", None)
-            updated_rows.append(
-                replace(
-                    row,
-                    strategy_state=state.to_json() if state is not None else row.strategy_state,
-                    strategy_update_reason=trace.reason,
-                    strategy_update_trace=trace.to_json(),
-                )
-            )
+            if callable(observe_result):
+                trace = observe_result(row, round_rows)
+                # observe_result 返回非 None 时（如 adaptive 模式），
+                # 将策略状态和更新追踪写入行记录
+                if trace is not None:
+                    state = getattr(agent, "strategy_state", None)
+                    row = replace(
+                        row,
+                        strategy_state=state.to_json() if state is not None else row.strategy_state,
+                        strategy_update_reason=trace.reason,
+                        strategy_update_trace=trace.to_json(),
+                    )
+            updated_rows.append(row)
         return updated_rows

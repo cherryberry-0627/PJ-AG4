@@ -8,12 +8,18 @@ LLM驱动的Agent pipeline
   5. 异常时自动降级到 fallback action
 """
 
+'''
+更新1：增加context模式
+增加ContextPlanningStage类和ContextPolicyAgent类实现LLM的context management
+'''
+
 import json
 from dataclasses import replace
-from typing import Any
+from statistics import mean
+from typing import Any, Sequence
 
 from ..config import AgentConfig, LLMConfig
-from ..contracts import AgentAction, DecisionTrace, MarketObservation
+from ..contracts import AgentAction, DecisionTrace, MarketObservation, SettlementRow
 from ..providers import build_openai_client, query_json_completion
 from ..utils import int_round_to_step, round_to_step
 from .pipeline import RolePipelineAgent
@@ -299,3 +305,84 @@ class LLMPolicyAgent(RolePipelineAgent):
                 llm_error=str(exc),
             )
             return replace(fallback, trace=trace)
+
+
+class LLMContextPlanningStage(LLMPlanningStage):
+    '''实现滚动context窗口，每轮结算后记录结果，并将其在下一轮注入prompt中。'''
+
+    def __init__(self, config: AgentConfig, *, llm_config: LLMConfig, client: Any) -> None:
+        super().__init__(config, llm_config=llm_config, client=client)
+        self._context_ring: list[dict[str, Any]] = []
+        self._max_context = 6
+
+    def add_round_context(self, row: SettlementRow, round_rows: Sequence[SettlementRow]) -> None:
+        """将本轮结算结果压缩为结构化字典并追加到context ring中。"""
+        competitors = [r for r in round_rows if r.agent_name != row.agent_name]
+        competitor_avg_price = mean(r.price for r in competitors) if competitors else row.price
+        best = max(round_rows, key=lambda r: r.profit)
+        context = {
+            "round": row.round,
+            "my": {
+                "price": round(row.price, 1),
+                "quantity": row.quantity,
+                "forecast": row.forecast_demand,
+                "profit": round(row.profit, 1),
+                "cumulative_profit": round(row.cum_profit, 1),
+                "service_rate": round(row.service_rate, 3),
+                "shortage": round(row.shortage_post_transfer, 1),
+                "inventory_end": round(row.inventory_end, 1),
+                "forecast_error": round(row.forecast_error_abs, 1),
+                "market_share": round(row.demand_share, 3),
+                "backlog": round(row.backlog_end, 1),
+                "sla_penalty": round(row.sla_queue_penalty, 1),
+            },
+            "market": {
+                "avg_price": round(row.market_avg_price, 1),
+                "competitor_avg_price": round(competitor_avg_price, 1),
+                "total_sales": round(row.market_total_sales, 1),
+                "true_demand": row.demand_true,
+            },
+            "best_agent": best.agent_name,
+            "best_profit": round(best.profit, 1),
+        }
+        self._context_ring.append(context)
+        if len(self._context_ring) > self._max_context:
+            self._context_ring.pop(0)
+
+    def _user_prompt(self, observation: MarketObservation, fallback: AgentAction, *, compact: bool) -> str:
+        base_prompt = super()._user_prompt(observation, fallback, compact=compact)
+        if compact or not self._context_ring:
+            return base_prompt
+        # 解析父类 JSON，注入 round_history 字段后重新序列化
+        payload = json.loads(base_prompt)
+        payload["round_history"] = list(self._context_ring)
+        return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+
+
+class LLMContextPolicyAgent(LLMPolicyAgent):
+    '''在LLM决策基础上增加滚动context窗口，异常时降级至heuristic fallback。'''
+    def __init__(
+        self,
+        config: AgentConfig,
+        *,
+        llm_config: LLMConfig,
+        fallback_agent: RolePipelineAgent,
+        client: Any,
+    ) -> None:
+        planner = LLMContextPlanningStage(config, llm_config=llm_config, client=client)
+        # 绕过 LLMPolicyAgent.__init__，直接初始化 RolePipelineAgent
+        RolePipelineAgent.__init__(
+            self,
+            config,
+            forecaster=LLMForecasterStage(planner),
+            pricer=LLMPricerStage(config, planner),
+            allocator=LLMAllocatorStage(config, planner),
+            risk_gate=RiskGateStage(config),
+            trace_source="llm-context",
+        )
+        self._fallback_agent = fallback_agent
+        self._planner = planner
+
+    def observe_result(self, row: SettlementRow, round_rows: Sequence[SettlementRow]) -> None:
+        """结算后回调：记录本轮结果到context ring中。"""
+        self._planner.add_round_context(row, round_rows)

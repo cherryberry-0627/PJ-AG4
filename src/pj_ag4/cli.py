@@ -1,3 +1,7 @@
+'''
+更新1：增加context模式
+增加llm-context选项
+'''
 from __future__ import annotations
 
 import argparse
@@ -36,9 +40,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--no-report", action="store_true", help="Skip Markdown report generation"
     )
+    # 增加功能
     parser.add_argument(
         "--agent-mode",
-        choices=("heuristic", "llm", "llm-adaptive"),
+        choices=("heuristic", "llm", "llm-adaptive", "llm-context"),
         default="heuristic",
         help="Policy backend for agent decisions",
     )

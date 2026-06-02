@@ -224,19 +224,17 @@ def iter_runtime_payloads(
         for row in round_rows:
             agent = agents.get(row.agent_name)
             observe_result = getattr(agent, "observe_result", None)
-            if not callable(observe_result):
-                updated_rows.append(row)
-                continue
-            trace = observe_result(row, round_rows)
-            state = getattr(agent, "strategy_state", None)
-            updated_rows.append(
-                replace(
-                    row,
-                    strategy_state=state.to_json() if state is not None else row.strategy_state,
-                    strategy_update_reason=trace.reason,
-                    strategy_update_trace=trace.to_json(),
-                )
-            )
+            if callable(observe_result):
+                trace = observe_result(row, round_rows)
+                if trace is not None:
+                    state = getattr(agent, "strategy_state", None)
+                    row = replace(
+                        row,
+                        strategy_state=state.to_json() if state is not None else row.strategy_state,
+                        strategy_update_reason=trace.reason,
+                        strategy_update_trace=trace.to_json(),
+                    )
+            updated_rows.append(row)
         round_rows = updated_rows
         rows.extend(round_rows)
         observations.record_round(snapshot=snapshot, actions=actions)
