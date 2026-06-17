@@ -129,6 +129,30 @@ def test_environment_validates_actions_before_settlement() -> None:
     assert by_name["PremiumCloud"].quantity == 0
 
 
+def test_dump_flag_uses_price_floor_safety_threshold() -> None:
+    config = default_simulation_config(seed=5, rounds=1)
+    env = MarketEnvironment(config)
+    snapshot = DemandSnapshot(
+        round_index=0,
+        true_demand=200,
+        observed_demand=198,
+        trend_component=180.0,
+        seasonal_component=0.0,
+        shock_component=0.0,
+        noise_component=0.0,
+    )
+    actions = {
+        "Hyperscaler": AgentAction(forecast_demand=200, price=4.6, quantity=120),
+        "PremiumCloud": AgentAction(forecast_demand=200, price=4.4, quantity=80),
+        "SpotBroker": AgentAction(forecast_demand=200, price=3.8, quantity=40),
+    }
+
+    rows = env.step(seed=config.seed, round_index=0, snapshot=snapshot, actions=actions)
+    by_name = {row.agent_name: row for row in rows}
+
+    assert by_name["Hyperscaler"].dump_flag == 1
+
+
 def test_obsolescence_rate_and_penalty_are_separate() -> None:
     config = default_simulation_config(seed=5, rounds=1)
     env = MarketEnvironment(config)

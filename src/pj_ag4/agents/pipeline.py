@@ -66,6 +66,12 @@ class RolePipelineAgent:
             or quantity_trace.get("llm_prompt_excerpt")
             or ""
         )
+        llm_reasoning = str(
+            forecast_trace.get("llm_reasoning")
+            or price_trace.get("llm_reasoning")
+            or quantity_trace.get("llm_reasoning")
+            or ""
+        )
         summary = (
             f"forecast {forecast_base:.1f} + {forecast_adjustment:.1f}; "
             f"price {price_base:.2f} + {price_adjustment:.2f}; "
@@ -74,6 +80,8 @@ class RolePipelineAgent:
             f"final forecast={reviewed_action.forecast_demand}, "
             f"price={reviewed_action.price:.2f}, quantity={reviewed_action.quantity}"
         )
+        if llm_reasoning:
+            summary += f" | reasoning: {llm_reasoning}"
         return DecisionTrace(
             source=self._trace_source,
             summary=summary,

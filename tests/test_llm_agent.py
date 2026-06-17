@@ -16,7 +16,7 @@ class _FakeCompletions:
                 SimpleNamespace(
                     finish_reason="stop",
                     message=SimpleNamespace(
-                        content='{"forecast_demand": 210, "price": 5.2, "quantity": 60}'
+                        content='{"forecast_demand": 210, "price": 5.2, "quantity": 60, "reasoning": "stable demand"}'
                     )
                 )
             ]
@@ -54,7 +54,7 @@ class _RetryFakeCompletions:
                 SimpleNamespace(
                     finish_reason="stop",
                     message=SimpleNamespace(
-                        content='{"forecast_demand": 190, "price": 4.8, "quantity": 50}'
+                        content='{"forecast_demand": 190, "price": 4.8, "quantity": 50, "reasoning": "retry recovered"}'
                     )
                 )
             ]
@@ -79,7 +79,7 @@ class _LengthButCompleteCompletions:
                 SimpleNamespace(
                     finish_reason="length",
                     message=SimpleNamespace(
-                        content='{"forecast_demand": 160, "price": 5.0, "quantity": 40}'
+                        content='{"forecast_demand": 160, "price": 5.0, "quantity": 40, "reasoning": "complete despite length"}'
                     ),
                 )
             ]
@@ -111,6 +111,7 @@ def test_run_simulation_with_llm_mode_uses_openai_compatible_client(monkeypatch,
     assert result.csv_path.exists()
     assert len(result.rows) == 6
     assert all(row.forecast_demand == 210 for row in result.rows)
+    assert all("reasoning: stable demand" in row.decision_reason for row in result.rows)
 
 
 def test_llm_mode_requires_api_key(monkeypatch, tmp_path) -> None:

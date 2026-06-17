@@ -39,6 +39,7 @@ class LLMPlanningStage:
         self._cache_value: dict[str, Any] | None = None
         self.last_prompt_excerpt = ""
         self.last_status = "idle"
+        self.last_reasoning = ""
 
     def _cache_token(self, observation: MarketObservation) -> tuple[Any, ...]:
         """从观察中提取用于缓存的key字段。"""
@@ -78,6 +79,7 @@ class LLMPlanningStage:
             retry_messages=retry_messages,
         )
         self.last_status = "ok"
+        self.last_reasoning = str(plan.get("reasoning", plan.get("reason", "")))
         self._cache_key = token
         self._cache_value = plan
         return plan
@@ -97,8 +99,10 @@ class LLMPlanningStage:
             "You are a market simulation agent in a repeated GPU spot market game.\n"
             f"{role_guidance}\n{stage_guidance}"
             'Return only valid JSON with exactly these keys: '
-            '"forecast_demand", "price", "quantity".\n'
-            "Use numeric values only. Do not add markdown or explanations."
+            '"forecast_demand", "price", "quantity", "reasoning".\n'
+            '"reasoning" should be a short sentence in Chinese explaining why you chose these values.\n'
+            "Use numeric values for forecast_demand, price, and quantity. "
+            "Do not add markdown or any text outside the JSON object."
         )
         if compact:
             prompt += "\nOutput one minified JSON object on a single line. Keep it under 40 tokens."
@@ -163,7 +167,7 @@ class LLMPlanningStage:
                 "legal_price_range": payload["legal_price_range"],
                 "legal_quantity_range": payload["legal_quantity_range"],
                 "fallback_action": payload["fallback_action"],
-                "instruction": "Return minified JSON only with forecast_demand, price, quantity.",
+                "instruction": "Return minified JSON only with forecast_demand, price, quantity, reasoning.",
             }
         return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
 
@@ -191,6 +195,7 @@ class LLMForecasterStage:
             "final": float(final_value),
             "llm_status": self._planner.last_status,
             "llm_prompt_excerpt": self._planner.last_prompt_excerpt,
+            "llm_reasoning": self._planner.last_reasoning,
         }
         return final_value
 
@@ -222,6 +227,7 @@ class LLMPricerStage:
             "final": final_value,
             "llm_status": self._planner.last_status,
             "llm_prompt_excerpt": self._planner.last_prompt_excerpt,
+            "llm_reasoning": self._planner.last_reasoning,
         }
         return final_value
 
@@ -253,6 +259,7 @@ class LLMAllocatorStage:
             "final": float(final_value),
             "llm_status": self._planner.last_status,
             "llm_prompt_excerpt": self._planner.last_prompt_excerpt,
+            "llm_reasoning": self._planner.last_reasoning,
         }
         return final_value
 

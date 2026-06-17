@@ -10,7 +10,7 @@
   - 从当前 `codex/dashboard-web-runtime` 创建 `codex/llm-adaptive-strategy`。
   - 不提交现有未跟踪文件和已存在的本地脏文件：`.gitignore`、`docs/ai/*`、`review.md`、PPT 目录等。
 - 新增核心类型：
-  - `StrategyState`：记录可学习策略参数，如 `risk_tolerance`、`price_aggressiveness`、`demand_sensitivity`、`inventory_caution`、`shock_responsiveness`、`competitor_reactivity`，范围固定为 `0.0-1.0`。
+  - `StrategyState`：记录可学习策略参数，如 `risk_tolerance`、`price_aggressiveness`、`demand_sensitivity`、`inventory_caution`、`shock_responsiveness`、`competitor_reactivity`，学习更新后的范围固定为 `0.05-0.95`。
   - `StrategyPersonality`：记录持续性格先验，包括每个参数的 delta 权重、每个参数的最大调整幅度、目标偏好和 prompt guidance。
   - `StrategyUpdateTrace`：记录上一轮反馈、LLM 原始 delta、personality 约束后的 delta、新策略状态、fallback 状态和摘要。
   - `SettlementRow` 增加：`strategy_state`、`strategy_update_reason`、`strategy_update_trace`。
