@@ -267,7 +267,7 @@ $$
 | 技术折旧率 $\delta_i$ | 0.15 | 0.10 | 0.12 |
 | SLA 违约惩罚 $\lambda_i$ | 1.20 | 1.50 | 1.30 |
 | 品牌吸引力 $b_i$ | 0.05 | 0.30 | 0.10 |
-| 初始声誉 $R_{i,1}$ | 0.65 | 0.80 | 0.55 |
+| 初始声誉 $R_{i,1}$ | 0.65 | 0.85 | 0.55 |
 | 初始库存 $I_{i,1}$ | 30 | 20 | 15 |
 | 调价摩擦 $\chi_i$ | 0.02 | 0.02 | 0.03 |
 
@@ -472,7 +472,19 @@ $$
 
 ### 3.4 声誉机制 Reputation
 
-设声誉 $R_{i,t} \in [0,1]$。
+声誉由三个独立子维度构成，分别衡量 Agent 在交付履约、定价纪律和同行协作方面的市场信誉。综合声誉 $R_{i,t} \in [0,1]$ 为三个子维度的加权平均：
+
+| 子维度 | 字段 | 含义 | 权重 |
+|--------|------|------|------|
+| $R^{del}_{i,t}$ | `rep_delivery` | 交付/履约声誉 | 0.5 |
+| $R^{prc}_{i,t}$ | `rep_pricing` | 定价纪律声誉 | 0.3 |
+| $R^{coo}_{i,t}$ | `rep_cooperation` | 协作意愿声誉 | 0.2 |
+
+$$
+R_{i,t} = clip\left(\frac{0.5 \cdot R^{del}_{i,t} + 0.3 \cdot R^{prc}_{i,t} + 0.2 \cdot R^{coo}_{i,t}}{1.0},\ 0,\ 1\right)
+$$
+
+三个子维度共享相同的更新率 $\eta_R = 0.25$，但分别独立评分、独立更新。
 
 #### 履约率
 
@@ -491,10 +503,12 @@ $$
 若满足：
 
 $$
-dump_{i,t} = \mathbf{1} \left( p_{i,t} < mc_{i,t} \land p_{i,t} < 0.85 \cdot \text{median}_{j \neq i}(p_{j,t}) \right)
+dump_{i,t} = \mathbf{1} \left( p_{i,t} < mc_{i,t} \land p_{i,t} < \max\left(0.85 \cdot \text{median}_{j \neq i}(p_{j,t}),\ p^{\min}_i + \Delta p_i\right) \right)
 $$
 
-则认定为恶意倾销。对应含义是：低于自身边际成本并明显低于同行价格中位数，属于以破坏性价格战抢夺算力客户。
+其中 $p^{\min}_i$ 为 Agent $i$ 的最低可报价，$\Delta p_i$ 为价格步长。
+
+> 注：后半句在低价区使用 `max(·)` 兜底。当全市场价格普遍逼近最低网格时，`0.85·median` 可能低于最低可报价导致判定完全失效；此时以 $p^{\min}_i + \Delta p_i$ 作为最低有效阈值，确保倾销判定在低价竞争场景下仍有区分度。
 
 #### 严重违约判定
 
@@ -504,27 +518,46 @@ $$
 
 即若最终无法交付超过 10% 的已分配需求，则认定为严重 SLA 违约。
 
-#### 协作贡献度
+#### 协作意愿
+
+当 Agent 被请求调货支援时，其协作声誉反映接受意愿与拒绝惩罚：
 
 $$
-help_{i,t}
-=\frac{\sum_{k \neq i} m_{i \to k,t}}{\max(1,\ surplus^{(0)}_{i,t})}
+coop\_score_{i,t} = clip\left(\frac{\text{accepts}_{i,t}}{\max(1,\ \text{attempts}_{i,t})} - \alpha_{\text{refuse}} \cdot \text{refused}_{i,t},\ 0,\ 1\right)
 $$
 
-若 Agent 在自己有富余节点时主动支援同行，则可获得正向声誉增益。
+若该轮未被请求调货（`attempts=0`），则协作声誉保持上轮值不变。
 
-#### 声誉得分
+#### 子维度得分
 
-$$
-score_{i,t}
-=clip\left(service_{i,t}+ 0.2 \cdot help_{i,t}- 0.4 \cdot dump_{i,t}- 0.6 \cdot default_{i,t},\ 0,\ 1\right)
-$$
-
-#### 声誉更新
+三个子维度分别独立评分：
 
 $$
-R_{i,t+1}
-=clip\left((1 - \eta_R) R_{i,t} + \eta_R score_{i,t},\ 0,\ 1\right)
+delivery\_score_{i,t} = clip\left(service_{i,t} - 0.5 \cdot default_{i,t},\ 0,\ 1\right)
+$$
+
+$$
+pricing\_score_{i,t} = \begin{cases} 0 & \text{if } dump_{i,t}=1 \\ 1 & \text{otherwise} \end{cases}
+$$
+
+$$
+cooperation\_score_{i,t} = coop\_score_{i,t}
+$$
+
+#### 子维度更新
+
+各子维度独立进行指数移动平均更新：
+
+$$
+R^{del}_{i,t+1} = clip\left((1 - \eta_R) R^{del}_{i,t} + \eta_R \cdot delivery\_score_{i,t},\ 0,\ 1\right)
+$$
+
+$$
+R^{prc}_{i,t+1} = clip\left((1 - \eta_R) R^{prc}_{i,t} + \eta_R \cdot pricing\_score_{i,t},\ 0,\ 1\right)
+$$
+
+$$
+R^{coo}_{i,t+1} = clip\left((1 - \eta_R) R^{coo}_{i,t} + \eta_R \cdot cooperation\_score_{i,t},\ 0,\ 1\right)
 $$
 
 其中：

@@ -255,6 +255,10 @@ class AdaptiveLLMAgent:
                 "best_profit_agent": best_profit.agent_name,
                 "best_profit": best_profit.profit,
                 "shock_component": row.shock_component,
+                "peer_reputations": [
+                    {"agent_name": item.agent_name, "reputation": item.reputation_end}
+                    for item in sorted(round_rows, key=lambda x: x.agent_name)
+                ],
             },
             "instruction": (
                 "Update strategy parameters for the next round. Keep personality persistent. "

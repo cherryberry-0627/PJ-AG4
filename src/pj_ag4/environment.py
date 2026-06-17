@@ -361,7 +361,10 @@ class MarketEnvironment:
             peer_prices = [price for idx, price in enumerate(prices) if ordered_names[idx] != name]
             peer_median = median(peer_prices) if peer_prices else action.price
             marginal_cost = agent_cfg.linear_cost + agent_cfg.quadratic_cost * max(1, action.quantity)
-            dump_flag = int(action.price < marginal_cost and action.price < 0.85 * peer_median)
+            ratio_threshold = 0.85 * peer_median
+            safety_threshold = agent_cfg.price_floor + agent_cfg.price_step
+            dump_threshold = max(ratio_threshold, safety_threshold)
+            dump_flag = int(action.price < marginal_cost and action.price < dump_threshold)
             default_flag = int(allocated_demand[name] > 0 and shortage_post / allocated_demand[name] > 0.1)
             delivery_score = clamp(service_rate - 0.5 * default_flag, 0.0, 1.0)
             pricing_score = 0.0 if dump_flag else 1.0
