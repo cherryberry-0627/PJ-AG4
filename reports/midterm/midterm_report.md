@@ -71,8 +71,6 @@ src/pj_ag4/
   agents.py              启发式 Agent 与 LLM Agent 决策链
   core/runtime.py        逐轮运行时编排
   data/observation.py    有限理性市场观察构造
-  dashboard.py           HTML dashboard 数据与模板渲染
-  web.py                 localhost 交互式服务
 quant/
   common.py              批量实验运行接口
   metrics.py             风险与收益指标
@@ -87,7 +85,7 @@ quant/
 2. ObservationBuilder 为每个 Agent 构造有限历史观察。
 3. Agent 输出本轮预测、价格和新增供给量。
 4. MarketEnvironment 统一进行需求分配、拆借、结算和声誉更新。
-5. 运行结果写入 CSV，并生成 PDF、HTML dashboard 和量化报告图表。
+5. 运行结果写入 CSV，并生成 PDF 图表和 Markdown 报告。
 
 ### 3.2 Agent 决策链
 
@@ -198,9 +196,8 @@ benchmark 对比了三类策略配置：默认 heuristic、低价型 rule_price_
 - 实现动态需求生成、市场结算、库存折旧、缺货惩罚、同行拆借和声誉更新。
 - 实现 3 个异质 Agent 的启发式 baseline。
 - 实现 LLM 后端和启发式 fallback。
-- 实现 CSV、PDF 图表、HTML dashboard 输出。
+- 实现 CSV、PDF 图表和 Markdown 报告输出。
 - 实现 `quant/` 批量 benchmark、敏感性分析和报告导出。
-- 当前测试集通过，包含 27 个自动化测试。
 
 从课程项目角度看，当前系统已经具备可演示、可复现、可量化分析的中期成果。相比单纯的理论建模，项目已经能跑出多轮交互数据，并能通过图表展示不同策略下的收益、履约、库存和声誉差异。
 
@@ -218,8 +215,7 @@ benchmark 对比了三类策略配置：默认 heuristic、低价型 rule_price_
 1. 扩展 LLM 多轮实验，比较 heuristic 与 LLM Agent 在需求冲击、价格战和声誉约束下的行为差异。
 2. 增加 ablation 实验，分别关闭声誉机制、拆借机制和库存折旧机制，观察市场结构变化。
 3. 将 Agent 阶段进一步拆分为独立模块，增强可测试性和可替换性。
-4. 丰富 dashboard 的交互控制，使用户可以实时调节需求冲击、Agent 模式和市场参数。
-5. 将中期报告中的图表生成流程整理为最终报告的一键复现实验脚本。
+4. 将中期报告中的图表生成流程整理为最终报告的一键复现实验脚本。
 
 ## 7. 中期结论
 

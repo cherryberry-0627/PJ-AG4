@@ -33,11 +33,6 @@ def build_parser() -> argparse.ArgumentParser:
         "--no-figure", action="store_true", help="Skip figure generation"
     )
     parser.add_argument(
-        "--no-dashboard",
-        action="store_true",
-        help="Skip interactive HTML dashboard generation",
-    )
-    parser.add_argument(
         "--no-report", action="store_true", help="Skip Markdown report generation"
     )
     # 增加功能
@@ -78,14 +73,11 @@ def main(argv: list[str] | None = None) -> int:
         config,
         output_dir=args.output_dir,
         generate_figure=not args.no_figure,
-        generate_dashboard=not args.no_dashboard,
         generate_report=not args.no_report,
     )
     print(f"CSV: {result.csv_path}")
     if result.figure_path:
         print(f"Figure: {result.figure_path}")
-    if result.dashboard_path:
-        print(f"Dashboard: {result.dashboard_path}")
     if result.report_path:
         print(f"Report: {result.report_path}")
     return 0

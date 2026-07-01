@@ -1,4 +1,4 @@
-# Quant Toolkit
+# 量化实验工具
 
 `quant/` 是建立在 `src/pj_ag4` 仿真内核之上的实验分析层，主要用于批量回测、策略对比、参数敏感性分析和报告导出。
 
@@ -17,16 +17,16 @@
 
 当前统计指标包括：
 
-- cumulative profit
-- mean profit
-- profit volatility
-- Sharpe-like
-- max drawdown
-- Calmar-like
-- win rate
-- avg reputation
-- avg service rate
-- total shortage
+- 累计利润
+- 平均利润
+- 利润波动
+- 类 Sharpe 指标
+- 最大回撤
+- 类 Calmar 指标
+- 胜率
+- 平均声誉
+- 平均服务率
+- 总短缺量
 
 ## 当前策略
 
@@ -44,10 +44,10 @@
 先在仓库根目录安装项目依赖：
 
 ```bash
-python3 -m pip install -e '.[dev]' --no-build-isolation
+python3 -m pip install -e . --no-build-isolation
 ```
 
-### 1. 跑 benchmark
+### 1. 跑 benchmark 对比
 
 ```bash
 python3 quant/run_benchmarks.py \
@@ -67,7 +67,7 @@ python3 quant/run_benchmarks.py \
 
 默认 benchmark CLI 不会自动包含 `llm` 策略；如果要一起跑，需要显式把 `llm` 加到 `--strategies` 里。
 
-### 2. 跑 sensitivity
+### 2. 跑敏感性分析
 
 ```bash
 python3 quant/run_sensitivity.py \
@@ -194,7 +194,7 @@ write_sensitivity_csv(Path("quant/outputs/api_sensitivity/summary.csv"), sens_su
 
 目前 `quant/` 的 CLI 脚本入口是可用的，适合直接做课程项目里的批量对比和报告导出。
 
-如果后面要继续整理，优先建议是：
+如果后续继续扩展，优先建议是：
 
 - 给主项目补正式的 `pj-ag4-benchmark` CLI
 - 把 `benchmark` 与 `sensitivity` 的输出格式进一步统一

@@ -1,31 +1,29 @@
-# PJ-AG4 Midterm Report Artifacts
+# PJ-AG4 中期报告材料
 
-This directory contains the midterm report deliverables and all repository-local paths referenced by the report/docx.
+本目录保存中期报告相关的文档、图表和实验输出，便于从仓库内复现报告中引用的结果。
 
-## Main deliverables
+## 主要文件
 
-- `PJ-AG4_midterm_report.pdf`: compiled LaTeX midterm report.
-- `PJ-AG4_人工智能导论中期汇报_填写版.docx`: filled AI course midterm template.
-- `midterm_report.md`: Markdown draft used before the LaTeX rewrite.
-- `latex/paper.tex`: LaTeX source.
-- `latex/paper.pdf`: compiled PDF next to the LaTeX source.
+- `PJ-AG4_midterm_report.pdf`：LaTeX 编译后的中期报告。
+- `PJ-AG4_人工智能导论中期汇报_填写版.docx`：课程中期模板填写版。
+- `midterm_report.md`：LaTeX 重写前的 Markdown 草稿。
+- `latex/paper.tex`：LaTeX 源文件。
+- `latex/paper.pdf`：LaTeX 编译结果。
 
-## LLM and baseline runs
+## 对照实验
 
 - `llm_run_20/simulation_results.csv`
 - `llm_run_20/strategy_analysis.pdf`
-- `llm_run_20/strategy_dashboard.html`
 - `heuristic_run_20/simulation_results.csv`
 - `heuristic_run_20/strategy_analysis.pdf`
-- `heuristic_run_20/strategy_dashboard.html`
 
-## Supporting experiments
+## 辅助实验
 
-- `default_run/`: 30-round heuristic reference run used by the Markdown draft.
-- `benchmark/reports/`: strategy comparison CSV/Markdown/PNG outputs.
-- `sensitivity/reports/`: reputation/noise sensitivity CSV/Markdown/PNG outputs.
+- `default_run/`：30 轮启发式基准运行。
+- `benchmark/reports/`：策略 benchmark 的 CSV、Markdown 和图片输出。
+- `sensitivity/reports/`：声誉权重和观测噪声敏感性分析输出。
 
-## Figures referenced by reports
+## 报告引用图表
 
 - `latex/figures/llm_profit_evolution.png`
 - `latex/figures/llm_market_fulfillment.png`
@@ -36,16 +34,12 @@ This directory contains the midterm report deliverables and all repository-local
 - `figures/agent_state_dynamics.png`
 - `figures/benchmark_comparison.png`
 
-## Core source paths referenced by reports
-
-These already live in the repository source tree:
+## 相关源码
 
 - `src/pj_ag4/timeseries.py`
 - `src/pj_ag4/environment.py`
-- `src/pj_ag4/agents.py`
 - `src/pj_ag4/core/runtime.py`
 - `src/pj_ag4/data/observation.py`
 - `quant/metrics.py`
 - `quant/run_benchmarks.py`
 - `quant/run_sensitivity.py`
-- `README.md`

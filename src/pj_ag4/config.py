@@ -12,7 +12,7 @@ from dotenv import find_dotenv, load_dotenv
 _DEFAULT_AGENTS_FILE = Path(__file__).resolve().parent / "data" / "agents.json"
 
 
-def _load_runtime_env() -> None:
+def load_runtime_env() -> None:
     dotenv_path = find_dotenv(usecwd=True)
     if dotenv_path:
         load_dotenv(dotenv_path=dotenv_path, override=False)
@@ -20,6 +20,10 @@ def _load_runtime_env() -> None:
     repo_root_env = Path(__file__).resolve().parents[2] / ".env"
     if repo_root_env.exists():
         load_dotenv(dotenv_path=repo_root_env, override=False)
+
+
+def _load_runtime_env() -> None:
+    load_runtime_env()
 
 
 @dataclass(frozen=True)

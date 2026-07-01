@@ -147,6 +147,7 @@ def run_profile(
     rounds: int,
     output_root: Path | None = None,
     generate_figure: bool = False,
+    generate_report: bool = True,
     llm_base_url: str | None = None,
     llm_api_key: str | None = None,
     llm_model: str | None = None,
@@ -173,6 +174,7 @@ def run_profile(
         config,
         output_dir=output_dir,
         generate_figure=generate_figure,
+        generate_report=generate_report,
         strategy_name=profile.kind,
     )
     summary = summarize_csv_run(result.csv_path, strategy=profile.name, seed=seed)

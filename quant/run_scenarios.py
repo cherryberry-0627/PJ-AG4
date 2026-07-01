@@ -100,7 +100,7 @@ def run_scenario_sweep(
     strategies: Sequence[str] = ("heuristic",),
     seeds: Sequence[int] = (7, 11, 23),
     rounds: int = 30,
-    output_root: Path | str = Path("outputs/final/scenario_sweep"),
+    output_root: Path | str = Path("outputs/final/scenario-sweep"),
 ) -> ScenarioSweepResult:
     output_root = Path(output_root)
     artifacts: list[RunArtifact] = []
@@ -128,7 +128,7 @@ def run_scenario_sweep(
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run PJ-AG4 scenario and ablation sweeps")
-    parser.add_argument("--output-root", type=Path, default=Path("outputs/final/scenario_sweep"))
+    parser.add_argument("--output-root", type=Path, default=Path("outputs/final/scenario-sweep"))
     parser.add_argument("--rounds", type=int, default=30)
     parser.add_argument("--seeds", type=int, nargs="+", default=[7, 11, 23])
     parser.add_argument("--strategies", nargs="+", default=["heuristic"])

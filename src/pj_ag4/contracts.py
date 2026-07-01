@@ -414,5 +414,4 @@ class SimulationResult:
     rows: list[object]
     csv_path: Path
     figure_path: Path | None
-    dashboard_path: Path | None = None
     report_path: Path | None = None

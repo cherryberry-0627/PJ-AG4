@@ -56,7 +56,7 @@
 
 \begin{abstract}
 \noindent
-本项目构建一个面向高端 GPU 算力现货与供应链分销市场的多 Agent 动态博弈仿真系统。市场中包含规模主导型 Hyperscaler、稳健交付型 PremiumCloud 和现货套利型 SpotBroker 三类异质 Agent。每个 Agent 在有限历史信息下进行需求预测、报价和新增供给决策，环境根据价格、品牌、声誉、库存、缺货和同行算力拆借机制完成统一结算。中期阶段已经完成可复现仿真内核、LLM 决策后端、启发式回退策略、CSV/PDF/HTML 输出和量化实验工具。本报告以本地 OpenAI-compatible 端点接入的 LLM 20 轮实验为主，结果显示 LLM 策略在 seed=7 的实验中达到 0.9963 的市场履约率和 1010.34 的市场总利润，相比同设置启发式基线在总利润上更高，但伴随 Hyperscaler 的轻微缺货和一次 default 事件。实验表明，声誉约束、价格纪律和库存控制共同塑造了 Agent 间的收益分化，项目已经具备进入最终实验扩展和论文式分析的基础。
+本项目构建一个面向高端 GPU 算力现货与供应链分销市场的多 Agent 动态博弈仿真系统。市场中包含规模主导型 Hyperscaler、稳健交付型 PremiumCloud 和现货套利型 SpotBroker 三类异质 Agent。每个 Agent 在有限历史信息下进行需求预测、报价和新增供给决策，环境根据价格、品牌、声誉、库存、缺货和同行算力拆借机制完成统一结算。中期阶段已经完成可复现仿真内核、LLM 决策后端、启发式回退策略、CSV/PDF 输出和量化实验工具。本报告以本地 OpenAI-compatible 端点接入的 LLM 20 轮实验为主，结果显示 LLM 策略在 seed=7 的实验中达到 0.9963 的市场履约率和 1010.34 的市场总利润，相比同设置启发式基线在总利润上更高，但伴随 Hyperscaler 的轻微缺货和一次 default 事件。实验表明，声誉约束、价格纪律和库存控制共同塑造了 Agent 间的收益分化，项目已经具备进入最终实验扩展和论文式分析的基础。
 
 \vspace{0.4em}
 \noindent\textbf{关键词：} 多 Agent 仿真；大语言模型；市场博弈；GPU 算力；声誉机制；供应链
@@ -151,8 +151,6 @@ src/pj_ag4/
   agents.py              启发式 Agent 与 LLM Agent 决策链
   core/runtime.py        逐轮仿真编排
   data/observation.py    有限理性市场观察构造
-  dashboard.py           HTML dashboard 渲染
-  web.py                 localhost 交互式服务
 quant/
   common.py              批量实验运行接口
   metrics.py             收益、风险和履约指标
@@ -160,7 +158,7 @@ quant/
 \end{verbatim}
 \end{footnotesize}
 
-运行流程为：需求生成器产生本轮需求；ObservationBuilder 为每个 Agent 构造观察；Agent 输出预测、价格和新增供给；MarketEnvironment 统一结算；结果写入 CSV 并生成图表和 dashboard。
+运行流程为：需求生成器产生本轮需求；ObservationBuilder 为每个 Agent 构造观察；Agent 输出预测、价格和新增供给；MarketEnvironment 统一结算；结果写入 CSV，并生成图表和报告。
 
 \subsection{Agent 决策链}
 
@@ -220,7 +218,7 @@ python3 -m pj_ag4.cli \
 \end{verbatim}
 \end{footnotesize}
 
-LLM 主实验共生成 60 行 Agent-round 级结算记录，并输出 CSV 结果、PDF 分析图和 HTML dashboard。
+LLM 主实验共生成 60 行 Agent-round 级结算记录，并输出 CSV 结果和 PDF 分析图。
 
 \subsection{评价指标}
 
@@ -324,10 +322,9 @@ LLM & 1010.34 & 0.9963 & 0.7680 & 14.07 \\
     \item 实现动态需求生成、需求分配、同行拆借、库存折旧、SLA 罚金和声誉更新；
     \item 实现三类异质 Agent，并拆分为 Forecaster、Pricer、Allocator 和 RiskGate 四阶段；
     \item 接入 OpenAI-compatible LLM 后端，并实现 JSON 输出解析和 heuristic fallback；
-    \item 实现 CLI、本地 dashboard、CSV 输出、PDF 图表和 HTML 可视化；
+    \item 实现 CLI、CSV 输出、PDF 图表和 Markdown 报告；
     \item 实现 \texttt{quant/} 实验层，用于 benchmark、敏感性分析和报告导出；
     \item 完成 LLM 20 轮主实验和同 seed 启发式对照实验；
-    \item 当前自动化测试集通过，共 27 个测试。
 \end{enumerate}
 
 从中期验收角度看，项目已经具备可运行、可复现、可解释、可视化和可扩展的核心能力。尤其是 LLM 模式已经不再停留于接口设计，而是能够完整参与多轮市场决策并产生可分析结果。
